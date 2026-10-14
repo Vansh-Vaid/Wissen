@@ -1,0 +1,6 @@
+[
+  {"id": "t1", "instrument": "TCS", "type": "level", "direction": "below", "level": 3900},
+  {"id": "t2", "instrument": "TCS", "type": "level", "direction": "above", "level": 3900},
+  {"id": "t3", "instrument": "TCS", "type": "level", "direction": "above", "level": 3950},
+  {"id": "t4", "instrument": "TCS", "type": "level", "direction": "below", "level": 3850}
+]

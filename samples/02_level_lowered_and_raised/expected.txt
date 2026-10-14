@@ -1,0 +1,5 @@
+2026-09-04  r1  INFY  level below 1500
+2026-09-05  r3  INFY  level above 1500
+2026-09-06  r1  INFY  level below 1500
+2026-09-06  r2  INFY  level below 1490
+2026-09-08  r3  INFY  level above 1500

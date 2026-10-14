@@ -1,0 +1,6 @@
+[
+  {"id": "r1", "instrument": "INFY", "type": "level", "direction": "below", "level": 1500},
+  {"id": "r2", "instrument": "INFY", "type": "level", "direction": "below", "level": 1490},
+  {"id": "r3", "instrument": "INFY", "type": "level", "direction": "above", "level": 1500},
+  {"id": "r4", "instrument": "INFY", "type": "level", "direction": "below", "level": 1550}
+]

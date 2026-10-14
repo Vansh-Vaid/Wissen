@@ -1,0 +1,2 @@
+2026-09-04  t2  TCS  level above 3900
+2026-09-06  t1  TCS  level below 3900

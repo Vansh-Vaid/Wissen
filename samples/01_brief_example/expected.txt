@@ -1,0 +1,2 @@
+2026-09-03  r1  INFY  level below 1500
+2026-09-24  r2  TCS   ma_cross 5/20 above

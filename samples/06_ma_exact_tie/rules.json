@@ -1,0 +1,4 @@
+[
+  {"id": "f1", "instrument": "RELIANCE", "type": "ma_cross", "short": 2, "long": 4, "direction": "above"},
+  {"id": "f2", "instrument": "RELIANCE", "type": "ma_cross", "short": 2, "long": 4, "direction": "below"}
+]

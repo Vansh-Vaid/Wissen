@@ -1,0 +1,4 @@
+2026-09-05  m1  INFY  ma_cross 2/3 above
+2026-09-06  m3  INFY  ma_cross 3/5 above
+2026-09-07  m2  INFY  ma_cross 2/3 below
+2026-09-07  m4  INFY  ma_cross 3/5 below

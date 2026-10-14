@@ -1,0 +1,7 @@
+[
+  {"id": "r2", "instrument": "BAJFINANCE", "type": "level", "direction": "below", "level": 7000},
+  {"id": "r10", "instrument": "ITC", "type": "level", "direction": "below", "level": 400},
+  {"id": "alpha", "instrument": "BAJFINANCE", "type": "level", "direction": "below", "level": 7050},
+  {"id": "Zeta", "instrument": "ITC", "type": "level", "direction": "above", "level": 300},
+  {"id": "ghost", "instrument": "WIPRO", "type": "level", "direction": "below", "level": 500}
+]

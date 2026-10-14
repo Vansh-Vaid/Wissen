@@ -1,0 +1,5 @@
+[
+  {"id": "a", "instrument": "AAA", "type": "ma_cross", "short": 5, "long": 20, "direction": "above"},
+  {"id": "b", "instrument": "BBB", "type": "ma_cross", "short": 5, "long": 20, "direction": "above"},
+  {"id": "c", "instrument": "BBB", "type": "ma_cross", "short": 5, "long": 21, "direction": "above"}
+]

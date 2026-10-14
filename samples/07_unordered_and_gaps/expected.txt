@@ -1,0 +1,4 @@
+2026-09-03  g1  INFY  level below 1500
+2026-09-07  g2  INFY  level above 1500
+2026-09-07  g3  TCS   ma_cross 2/3 above
+2026-09-08  g1  INFY  level below 1500

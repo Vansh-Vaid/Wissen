@@ -1,0 +1,5 @@
+[
+  {"id": "g1", "instrument": "INFY", "type": "level", "direction": "below", "level": 1500},
+  {"id": "g2", "instrument": "INFY", "type": "level", "direction": "above", "level": 1500},
+  {"id": "g3", "instrument": "TCS", "type": "ma_cross", "short": 2, "long": 3, "direction": "above"}
+]

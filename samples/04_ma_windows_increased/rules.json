@@ -1,0 +1,7 @@
+[
+  {"id": "m1", "instrument": "INFY", "type": "ma_cross", "short": 2, "long": 3, "direction": "above"},
+  {"id": "m2", "instrument": "INFY", "type": "ma_cross", "short": 2, "long": 3, "direction": "below"},
+  {"id": "m3", "instrument": "INFY", "type": "ma_cross", "short": 3, "long": 5, "direction": "above"},
+  {"id": "m4", "instrument": "INFY", "type": "ma_cross", "short": 3, "long": 5, "direction": "below"},
+  {"id": "m5", "instrument": "INFY", "type": "ma_cross", "short": 5, "long": 10, "direction": "above"}
+]
