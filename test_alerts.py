@@ -7,7 +7,7 @@ import unittest
 from datetime import date
 from decimal import Decimal
 
-from alerts import (InputError, crossing_days, find_alerts, level_differences, ma_differences,
+from alerts import (InputError, Rule, crossing_days, find_alerts, level_differences, ma_differences,
                     read_prices, read_rules)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -55,8 +55,7 @@ class TestRules(unittest.TestCase):
         self.assertEqual(crossing_days(values, "below"), [sept(2)])
 
     def test_ticker_is_printed_in_capitals(self):
-        rule = {"id": "r1", "instrument": "infy", "type": "level", "direction": "below",
-                "level": Decimal(1500), "level_text": "1500"}
+        rule = Rule("r1", "infy", "below", "level", level=Decimal(1500), level_text="1500")
         alerts = find_alerts({"INFY": series(1510, 1490)}, [rule])
         self.assertEqual(alerts, [("2026-09-02", "r1", "INFY", "level below 1500")])
 
@@ -72,6 +71,11 @@ class TestRules(unittest.TestCase):
     def test_ma_needs_one_more_day_than_the_long_window(self):
         self.assertEqual(crossing_days(ma_differences(series(1, 1, 100), 2, 3), "above"), [])
         self.assertEqual(crossing_days(ma_differences(series(10, 10, 7, 20), 2, 3), "above"), [sept(4)])
+
+    def test_ma_stays_exact_beyond_28_digits(self):
+        # 31 significant digits: the default Decimal precision (28) would round these sums.
+        a, b = "100." + "0" * 27 + "1", "100." + "0" * 27 + "2"
+        self.assertEqual(crossing_days(ma_differences(series(a, a, b), 1, 2), "above"), [sept(3)])
 
     def test_ma_exact_tie_is_not_a_cross(self):
         # MA2 and MA4 are both exactly 1675.805 on the last day; floats disagree.
@@ -105,7 +109,21 @@ class TestReadingFiles(unittest.TestCase):
 
     def test_whole_number_rule_id_is_accepted(self):
         rule = {"id": 7, "instrument": "INFY", "type": "level", "direction": "below", "level": 1500}
-        self.assertEqual(read_rules(self.write("r.json", json.dumps([rule])))[0]["id"], "7")
+        self.assertEqual(read_rules(self.write("r.json", json.dumps([rule])))[0].id, "7")
+
+    def test_empty_file_says_it_is_empty(self):
+        with self.assertRaisesRegex(InputError, "empty"):
+            read_prices(self.write("p.csv", ""))
+
+    def test_garbled_ticker_is_skipped(self):
+        path = self.write("p.csv", "date,instrument,close\n2026-09-01,INF\xd8,1520\n2026-09-01,TCS,3900\n",
+                          encoding="latin-1")
+        self.assertEqual(list(read_prices(path)), ["TCS"])
+
+    def test_level_in_exponent_form_prints_as_a_plain_number(self):
+        path = self.write("r.json", '[{"id": "r1", "instrument": "INFY", "type": "level", '
+                                    '"direction": "below", "level": 1.5e3}]')
+        self.assertEqual(read_rules(path)[0].level_text, "1500")
 
     def test_missing_column_is_an_error(self):
         path = self.write("p.csv", "date,instrument,price\n2026-09-01,INFY,1520\n")

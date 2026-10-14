@@ -19,13 +19,13 @@ MA2      -   10  8.5  8.5 11.5
 MA3      -    -    9    9   10     MA2 goes over MA3 on day 5 -> alert
 ```
 
-**Output.** One line per alert, sorted by date then rule id, tickers in capitals, columns lined up as in the brief. Days with no alerts print nothing.
+**Output.** One line per alert, sorted by date then rule id (as text, so `r10` comes before `r2`), tickers in capitals, columns lined up as in the brief. Days with no alerts print nothing.
 ```
 2026-09-03  r1  INFY  level below 1500
 2026-09-24  r2  TCS   ma_cross 5/20 above
 ```
 
-**Bad input.** Rows may be in any order. A row with a bad date or a price that is not a positive number is skipped with a warning. Two different prices for the same stock and day, or an invalid rule, stop the tool with an error.
+**Bad input.** Rows may be in any order. Dates are `YYYY-MM-DD` (`2026-9-1` is also accepted). A row with a bad date, an unreadable ticker or a price that is not a positive number is skipped with a warning. Two different prices for the same stock and day, or an invalid rule, stop the tool with an error.
 
 ## Use of the AI assistant
 Prompts, in brief: "design a build as a senior engineer", "build and test it against the PDF", "add edge cases", "rewrite it simply".

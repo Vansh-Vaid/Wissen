@@ -1,12 +1,26 @@
 import csv
 import json
 import sys
+from dataclasses import dataclass
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
+from decimal import MAX_PREC, Decimal, InvalidOperation, localcontext
+from typing import Optional
 
 
 class InputError(Exception):
     pass
+
+
+@dataclass
+class Rule:
+    id: str
+    instrument: str
+    direction: str
+    type: str
+    level: Optional[Decimal] = None
+    level_text: str = ""
+    short: int = 0
+    long: int = 0
 
 
 def warn(message):
@@ -29,7 +43,7 @@ def parse_row(row, columns):
         close = Decimal(row[close_col].strip())
     except (IndexError, ValueError, InvalidOperation):
         return None
-    if not instrument or not close.is_finite() or close <= 0:
+    if not instrument or "\ufffd" in instrument or not close.is_finite() or close <= 0:
         return None
     return instrument, day, close
 
@@ -40,7 +54,10 @@ def read_prices(path):
 
     with open(path, newline="", encoding="utf-8-sig", errors="replace") as f:
         reader = csv.reader(f)
-        columns = find_columns(next(reader, []))
+        header = next(reader, None)
+        if header is None:
+            raise InputError("prices file is empty")
+        columns = find_columns(header)
 
         for row in reader:
             if not "".join(row).strip():
@@ -93,25 +110,22 @@ def check_rule(rule, used_ids):
     if direction not in ("above", "below"):
         raise InputError(f"rule '{rule_id}': direction must be 'above' or 'below'")
 
-    checked = {"id": rule_id, "instrument": instrument.strip(), "direction": direction}
     rule_type = str(rule.get("type", "")).strip().lower()
 
     if rule_type == "level":
         level = rule.get("level")
         if not (is_whole_number(level) or isinstance(level, Decimal)):
             raise InputError(f"rule '{rule_id}': level must be a number")
-        checked.update(type="level", level=Decimal(level), level_text=str(level))
+        level = Decimal(level)
+        return Rule(rule_id, instrument.strip(), direction, "level", level=level, level_text=f"{level:f}")
 
-    elif rule_type == "ma_cross":
+    if rule_type == "ma_cross":
         short, long = rule.get("short"), rule.get("long")
         if not (is_whole_number(short) and is_whole_number(long) and 0 < short < long):
             raise InputError(f"rule '{rule_id}': short and long must be whole numbers with 0 < short < long")
-        checked.update(type="ma_cross", short=short, long=long)
+        return Rule(rule_id, instrument.strip(), direction, "ma_cross", short=short, long=long)
 
-    else:
-        raise InputError(f"rule '{rule_id}': unknown type {rule.get('type')!r}")
-
-    return checked
+    raise InputError(f"rule '{rule_id}': unknown type {rule.get('type')!r}")
 
 
 def read_rules(path):
@@ -134,18 +148,20 @@ def level_differences(series, level):
 
 def ma_differences(series, short, long):
     # sign of (short_sum / short - long_sum / long), without dividing
-    totals = [0]
-    for _, close in series:
-        totals.append(totals[-1] + close)
+    with localcontext() as context:
+        context.prec = MAX_PREC  # no rounding, however many digits the prices have
+        totals = [0]
+        for _, close in series:
+            totals.append(totals[-1] + close)
 
-    values = []
-    for count, (day, _) in enumerate(series, start=1):
-        if count < long:
-            values.append((day, None))
-            continue
-        short_sum = totals[count] - totals[count - short]
-        long_sum = totals[count] - totals[count - long]
-        values.append((day, short_sum * long - long_sum * short))
+        values = []
+        for count, (day, _) in enumerate(series, start=1):
+            if count < long:
+                values.append((day, None))
+                continue
+            short_sum = totals[count] - totals[count - short]
+            long_sum = totals[count] - totals[count - long]
+            values.append((day, short_sum * long - long_sum * short))
     return values
 
 
@@ -164,20 +180,20 @@ def crossing_days(values, direction):
 def find_alerts(prices, rules):
     alerts = []
     for rule in rules:
-        series = prices.get(rule["instrument"].upper())
+        series = prices.get(rule.instrument.upper())
         if series is None:
-            warn(f"rule '{rule['id']}': no prices for {rule['instrument']}")
+            warn(f"rule '{rule.id}': no prices for {rule.instrument}")
             continue
 
-        if rule["type"] == "level":
-            values = level_differences(series, rule["level"])
-            text = f"level {rule['direction']} {rule['level_text']}"
+        if rule.type == "level":
+            values = level_differences(series, rule.level)
+            text = f"level {rule.direction} {rule.level_text}"
         else:
-            values = ma_differences(series, rule["short"], rule["long"])
-            text = f"ma_cross {rule['short']}/{rule['long']} {rule['direction']}"
+            values = ma_differences(series, rule.short, rule.long)
+            text = f"ma_cross {rule.short}/{rule.long} {rule.direction}"
 
-        for day in crossing_days(values, rule["direction"]):
-            alerts.append((day.isoformat(), rule["id"], rule["instrument"].upper(), text))
+        for day in crossing_days(values, rule.direction):
+            alerts.append((day.isoformat(), rule.id, rule.instrument.upper(), text))
 
     alerts.sort(key=lambda alert: (alert[0], alert[1]))
     return alerts
