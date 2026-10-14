@@ -13,45 +13,53 @@ def warn(message):
     print(f"warning: {message}", file=sys.stderr)
 
 
+def find_columns(header):
+    names = [name.strip().lower() for name in header]
+    for column in ("date", "instrument", "close"):
+        if column not in names:
+            raise InputError(f"prices file has no '{column}' column")
+    return names.index("date"), names.index("instrument"), names.index("close")
+
+
+def parse_row(row, columns):
+    date_col, instrument_col, close_col = columns
+    try:
+        day = datetime.strptime(row[date_col].strip(), "%Y-%m-%d").date()
+        instrument = row[instrument_col].strip().upper()
+        close = Decimal(row[close_col].strip())
+    except (IndexError, ValueError, InvalidOperation):
+        return None
+    if not instrument or not close.is_finite() or close <= 0:
+        return None
+    return instrument, day, close
+
+
 def read_prices(path):
     prices = {}
     seen = {}
 
     with open(path, newline="", encoding="utf-8-sig") as f:
         reader = csv.reader(f)
-        header = [name.strip().lower() for name in next(reader, [])]
-        for column in ("date", "instrument", "close"):
-            if column not in header:
-                raise InputError(f"prices file has no '{column}' column")
-        date_col = header.index("date")
-        instrument_col = header.index("instrument")
-        close_col = header.index("close")
+        columns = find_columns(next(reader, []))
 
         for row in reader:
-            line = reader.line_num
             if not "".join(row).strip():
                 continue
+            line = reader.line_num
 
-            try:
-                day = datetime.strptime(row[date_col].strip(), "%Y-%m-%d").date()
-                instrument = row[instrument_col].strip().upper()
-                close = Decimal(row[close_col].strip())
-            except (IndexError, ValueError, InvalidOperation):
-                warn(f"line {line}: cannot read {','.join(row)!r}, skipped")
+            parsed = parse_row(row, columns)
+            if parsed is None:
+                warn(f"line {line}: bad row {','.join(row)!r}, skipped")
                 continue
 
-            if not instrument or not close.is_finite() or close <= 0:
-                warn(f"line {line}: invalid row {','.join(row)!r}, skipped")
-                continue
-
-            key = (instrument, day)
-            if key in seen:
-                if seen[key] != close:
+            instrument, day, close = parsed
+            if (instrument, day) in seen:
+                if seen[(instrument, day)] != close:
                     raise InputError(f"line {line}: two different closes for {instrument} on {day}")
                 warn(f"line {line}: duplicate row, skipped")
                 continue
 
-            seen[key] = close
+            seen[(instrument, day)] = close
             prices.setdefault(instrument, []).append((day, close))
 
     for series in prices.values():
@@ -174,11 +182,11 @@ def find_alerts(prices, rules):
 
 
 def format_alerts(alerts):
-    id_width = max((len(a[1]) for a in alerts), default=0)
-    instrument_width = max((len(a[2]) for a in alerts), default=0)
+    id_width = max((len(rule_id) for _, rule_id, _, _ in alerts), default=0)
+    name_width = max((len(name) for _, _, name, _ in alerts), default=0)
     return [
-        f"{day}  {rule_id.ljust(id_width)}  {instrument.ljust(instrument_width)}  {text}"
-        for day, rule_id, instrument, text in alerts
+        f"{day}  {rule_id.ljust(id_width)}  {name.ljust(name_width)}  {text}"
+        for day, rule_id, name, text in alerts
     ]
 
 

@@ -41,6 +41,7 @@ Each folder in `samples/` has `prices.csv`, `rules.json` and `expected.txt`. `py
 ## Verification
 - The samples' expected outputs were worked out by hand first, then matched against an earlier, separately written version of the tool.
 - I broke the code on purpose in 14 ways (firing every day, off-by-one windows, floats, wrong sort order, and so on) and checked that the tests fail each time. One gap was found this way: `short == long` was not tested, so I added it.
+- Outside the repo, I also ran 100 generated cases (levels raised and lowered, windows from 1/2 to 20/50, ties, shuffled and messy files, odd ids, invalid rules) against a separate simple implementation; all matched. I checked 12 of them fully by hand, one or more from each group.
 - Tests pass on Python 3.9, 3.11, 3.12 and 3.13.
 
 ## Use of the AI assistant

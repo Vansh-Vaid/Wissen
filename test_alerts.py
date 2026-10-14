@@ -21,12 +21,14 @@ def sept(day):
     return date(2026, 9, day)
 
 
-def run_tool(prices_path, rules_path):
-    return subprocess.run([sys.executable, os.path.join(HERE, "alerts.py"), prices_path, rules_path],
-                          capture_output=True, text=True)
+def run_sample(name):
+    folder = os.path.join(SAMPLES, name)
+    command = [sys.executable, os.path.join(HERE, "alerts.py"),
+               os.path.join(folder, "prices.csv"), os.path.join(folder, "rules.json")]
+    return subprocess.run(command, capture_output=True, text=True)
 
 
-class TestCrossings(unittest.TestCase):
+class TestRules(unittest.TestCase):
     def test_level_crosses_below(self):
         values = level_differences(series("1520.50", "1534.10", "1498.00"), Decimal(1500))
         self.assertEqual(crossing_days(values, "below"), [sept(3)])
@@ -92,17 +94,18 @@ class TestReadingFiles(unittest.TestCase):
             read_prices(path)
 
     def test_invalid_rules_are_errors(self):
-        good = {"id": "r1", "instrument": "INFY", "type": "level", "direction": "below", "level": 1500}
+        level = {"id": "r1", "instrument": "INFY", "type": "level", "direction": "below", "level": 1500}
+        ma = {"id": "r2", "instrument": "TCS", "type": "ma_cross", "short": 5, "long": 20, "direction": "above"}
         bad_rules = [
-            [dict(good, type="percent")],
-            [dict(good, direction="up")],
-            [dict(good, level="1500")],
-            [dict(good, level=True)],
-            [{"id": "m", "instrument": "TCS", "type": "ma_cross", "short": 20, "long": 5, "direction": "above"}],
-            [{"id": "m", "instrument": "TCS", "type": "ma_cross", "short": 20, "long": 20, "direction": "above"}],
-            [{"id": "m", "instrument": "TCS", "type": "ma_cross", "short": 5.5, "long": 20, "direction": "above"}],
-            [good, good],
-            good,
+            [dict(level, type="percent")],
+            [dict(level, direction="up")],
+            [dict(level, level="1500")],
+            [dict(level, level=True)],
+            [dict(ma, short=20, long=5)],
+            [dict(ma, short=20, long=20)],
+            [dict(ma, short=5.5)],
+            [level, level],
+            level,
         ]
         for rules in bad_rules:
             with self.subTest(rules=rules):
@@ -114,22 +117,19 @@ class TestReadingFiles(unittest.TestCase):
 class TestSamples(unittest.TestCase):
     def test_every_sample_gives_its_expected_output(self):
         for name in sorted(os.listdir(SAMPLES)):
-            folder = os.path.join(SAMPLES, name)
             with self.subTest(sample=name):
-                result = run_tool(os.path.join(folder, "prices.csv"), os.path.join(folder, "rules.json"))
-                with open(os.path.join(folder, "expected.txt")) as f:
+                result = run_sample(name)
+                with open(os.path.join(SAMPLES, name, "expected.txt")) as f:
                     self.assertEqual(result.stdout, f.read())
                 self.assertNotIn("Traceback", result.stderr)
 
     def test_invalid_rule_sample_exits_with_2(self):
-        folder = os.path.join(SAMPLES, "10_invalid_rule")
-        result = run_tool(os.path.join(folder, "prices.csv"), os.path.join(folder, "rules.json"))
+        result = run_sample("10_invalid_rule")
         self.assertEqual(result.returncode, 2)
         self.assertIn("rule 'bad'", result.stderr)
 
     def test_messy_sample_warns_about_each_bad_row(self):
-        folder = os.path.join(SAMPLES, "08_messy_csv")
-        result = run_tool(os.path.join(folder, "prices.csv"), os.path.join(folder, "rules.json"))
+        result = run_sample("08_messy_csv")
         self.assertEqual(result.stderr.count("warning"), 6)
 
 
