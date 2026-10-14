@@ -36,7 +36,7 @@ class CliTest(TempFiles, unittest.TestCase):
         # TCS has only 2 days, so its 5/20 averages are never defined.
         result = self.run_tool(BRIEF_PRICES, BRIEF_RULES)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout, "2026-09-03 r1 INFY level below 1500\n")
+        self.assertEqual(result.stdout, "2026-09-03  r1  INFY  level below 1500\n")
         self.assertEqual(result.stderr, "")
 
     def test_shuffled_input_gives_identical_output(self):
@@ -56,9 +56,9 @@ class CliTest(TempFiles, unittest.TestCase):
             {"id": "b", "instrument": "AAA", "type": "level", "direction": "below", "level": 100},
         ]
         self.assertEqual(self.run_tool(prices, rules).stdout.splitlines(), [
-            "2026-09-02 b AAA level below 100",
-            "2026-09-02 c BBB level below 100",
-            "2026-09-03 a AAA level above 100",
+            "2026-09-02  b  AAA  level below 100",
+            "2026-09-02  c  BBB  level below 100",
+            "2026-09-03  a  AAA  level above 100",
         ])
 
     def test_rule_ids_sort_as_strings(self):
@@ -77,21 +77,21 @@ class CliTest(TempFiles, unittest.TestCase):
         rules = [{"id": n, "instrument": n, "type": "ma_cross", "short": 1, "long": 2, "direction": "above"}
                  for n in ("AAA", "BBB")]
         self.assertEqual(self.run_tool(prices, rules).stdout.splitlines(), [
-            "2026-09-04 AAA AAA ma_cross 1/2 above",
-            "2026-09-04 BBB BBB ma_cross 1/2 above",
+            "2026-09-04  AAA  AAA  ma_cross 1/2 above",
+            "2026-09-04  BBB  BBB  ma_cross 1/2 above",
         ])
 
     def test_rule_for_unknown_instrument_warns_and_continues(self):
         rules = BRIEF_RULES + [{"id": "r3", "instrument": "WIPRO", "type": "level", "direction": "above", "level": 1}]
         result = self.run_tool(BRIEF_PRICES, rules)
         self.assertEqual(result.returncode, 0)
-        self.assertEqual(result.stdout, "2026-09-03 r1 INFY level below 1500\n")
+        self.assertEqual(result.stdout, "2026-09-03  r1  INFY  level below 1500\n")
         self.assertIn("WIPRO", result.stderr)
 
     def test_bad_price_row_warns_but_stdout_stays_clean(self):
         result = self.run_tool(BRIEF_PRICES + "2026-09-04,INFY,oops\n", BRIEF_RULES)
         self.assertEqual(result.returncode, 0)
-        self.assertEqual(result.stdout, "2026-09-03 r1 INFY level below 1500\n")
+        self.assertEqual(result.stdout, "2026-09-03  r1  INFY  level below 1500\n")
         self.assertIn("line 7", result.stderr)
 
     def test_no_alerts_prints_nothing(self):
@@ -126,10 +126,9 @@ class CliTest(TempFiles, unittest.TestCase):
         result = run(os.path.join(ROOT, "examples", "prices.csv"), os.path.join(ROOT, "examples", "rules.json"))
         self.assertEqual(result.returncode, 0, result.stderr)
         lines = result.stdout.splitlines()
-        self.assertEqual(lines[0], "2026-09-03 r1 INFY level below 1500")
+        self.assertEqual(lines[0], "2026-09-03  r1  INFY  level below 1500")
         # Hand-checked: on 2026-10-05 MA5 = 3850 > MA20 = 3833.5; the day before 3827.2 < 3832.3.
-        self.assertIn("2026-10-05 r2 TCS ma_cross 5/20 above", lines)
-        self.assertEqual([l for l in lines if " r2 " in l], ["2026-10-05 r2 TCS ma_cross 5/20 above"])
+        self.assertEqual([l for l in lines if " r2 " in l], ["2026-10-05  r2  TCS   ma_cross 5/20 above"])
 
 
 if __name__ == "__main__":

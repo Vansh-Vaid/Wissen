@@ -8,6 +8,7 @@ stderr. Exit code 0 on success (even with warnings), 2 on a fatal error.
 """
 
 import csv
+import io
 import json
 import sys
 from dataclasses import dataclass
@@ -50,9 +51,33 @@ class MaCrossRule:
         return f"ma_cross {self.short}/{self.long} {self.direction}"
 
 
+def _warn(msg: str) -> None:
+    print(f"warning: {msg}", file=sys.stderr)
+
+
+def _read_text(path: str, what: str) -> str:
+    """Read a file as UTF-8 (BOM allowed); fall back to Latin-1 so a file
+    saved by Excel on Windows still loads instead of crashing."""
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+    except OSError as e:
+        raise AlertError(f"cannot read {what} file: {e}")
+    try:
+        return data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        _warn(f"{what} file is not valid UTF-8; reading it as Latin-1")
+        return data.decode("latin-1")
+
+
 def _is_int(value) -> bool:
     # bool is a subclass of int in Python; `"short": true` must not mean 1.
     return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _keyword(value):
+    """'Below ' -> 'below'; non-strings are returned unchanged and fail validation."""
+    return value.strip().lower() if isinstance(value, str) else value
 
 
 def parse_rule(raw, index: int):
@@ -71,11 +96,11 @@ def parse_rule(raw, index: int):
         raise AlertError(f"{where}: 'instrument' must be a non-empty string")
     instrument = instrument.strip()
 
-    direction = raw.get("direction")
+    direction = _keyword(raw.get("direction"))
     if direction not in DIRECTIONS:
         raise AlertError(f"{where}: 'direction' must be 'above' or 'below', got {direction!r}")
 
-    rule_type = raw.get("type")
+    rule_type = _keyword(raw.get("type"))
     if rule_type == "level":
         level = raw.get("level")
         # JSON is loaded with parse_float=Decimal, so a level is an int or a Decimal.
@@ -98,11 +123,9 @@ def parse_rule(raw, index: int):
 
 
 def load_rules(path: str) -> list:
+    text = _read_text(path, "rules")
     try:
-        with open(path, encoding="utf-8-sig") as f:
-            raw = json.load(f, parse_float=Decimal)
-    except OSError as e:
-        raise AlertError(f"cannot read rules file: {e}")
+        raw = json.loads(text, parse_float=Decimal)
     except json.JSONDecodeError as e:
         raise AlertError(f"rules file is not valid JSON: {e}")
     if not isinstance(raw, list):
@@ -124,10 +147,6 @@ def load_rules(path: str) -> list:
 Series = List[Tuple[date, Decimal]]  # one instrument, sorted by date
 
 
-def _warn(msg: str) -> None:
-    print(f"warning: {msg}", file=sys.stderr)
-
-
 def load_prices(path: str) -> Dict[str, Series]:
     """Return {INSTRUMENT: [(date, close), ...] sorted by date}.
 
@@ -136,60 +155,63 @@ def load_prices(path: str) -> Dict[str, Series]:
     know which is right, and guessing would produce wrong alerts silently.
     Instrument names are matched case-insensitively (stored upper-case).
     """
-    try:
-        f = open(path, encoding="utf-8-sig", newline="")
-    except OSError as e:
-        raise AlertError(f"cannot read prices file: {e}")
+    text = _read_text(path, "prices")
 
     by_key: Dict[Tuple[str, date], Tuple[Decimal, int]] = {}
-    with f:
-        reader = csv.reader(f)
-        header = next(reader, None)
-        if header is None:
-            raise AlertError("prices file is empty")
-        columns = [h.strip().lower() for h in header]
-        missing = [c for c in ("date", "instrument", "close") if c not in columns]
-        if missing:
-            raise AlertError(f"prices file is missing column(s): {', '.join(missing)}")
-        i_date, i_inst, i_close = (columns.index(c) for c in ("date", "instrument", "close"))
+    reader = csv.reader(io.StringIO(text, newline=""))
+    header = next(reader, None)
+    if header is None:
+        raise AlertError("prices file is empty")
+    columns = [h.strip().lower() for h in header]
+    missing = [c for c in ("date", "instrument", "close") if c not in columns]
+    if missing:
+        raise AlertError(f"prices file is missing column(s): {', '.join(missing)}")
+    i_date, i_inst, i_close = (columns.index(c) for c in ("date", "instrument", "close"))
+    needed = max(i_date, i_inst, i_close) + 1  # trailing optional columns may be absent
 
-        for row in reader:
-            line = reader.line_num
-            if not any(cell.strip() for cell in row):
-                continue  # blank line
-            if len(row) < len(columns):
-                _warn(f"prices line {line}: expected {len(columns)} fields, got {len(row)}; skipped")
-                continue
+    while True:
+        try:
+            row = next(reader, None)
+        except csv.Error as e:
+            raise AlertError(f"prices line {reader.line_num}: unreadable CSV ({e})")
+        if row is None:
+            break
+        line = reader.line_num
+        if not any(cell.strip() for cell in row):
+            continue  # blank line
+        if len(row) < needed:
+            _warn(f"prices line {line}: expected {len(columns)} fields, got {len(row)}; skipped")
+            continue
 
-            raw_date, raw_inst, raw_close = row[i_date].strip(), row[i_inst].strip(), row[i_close].strip()
-            try:
-                day = datetime.strptime(raw_date, "%Y-%m-%d").date()
-            except ValueError:
-                _warn(f"prices line {line}: bad date {raw_date!r} (expected YYYY-MM-DD); skipped")
-                continue
-            if not raw_inst:
-                _warn(f"prices line {line}: empty instrument; skipped")
-                continue
-            try:
-                close = Decimal(raw_close)
-            except InvalidOperation:
-                close = None
-            # Decimal happily parses "NaN" and "Infinity"; a price must be finite and positive.
-            if close is None or not close.is_finite() or close <= 0:
-                _warn(f"prices line {line}: bad close {raw_close!r}; skipped")
-                continue
+        raw_date, raw_inst, raw_close = row[i_date].strip(), row[i_inst].strip(), row[i_close].strip()
+        try:
+            day = datetime.strptime(raw_date, "%Y-%m-%d").date()
+        except ValueError:
+            _warn(f"prices line {line}: bad date {raw_date!r} (expected YYYY-MM-DD); skipped")
+            continue
+        if not raw_inst:
+            _warn(f"prices line {line}: empty instrument; skipped")
+            continue
+        try:
+            close = Decimal(raw_close)
+        except InvalidOperation:
+            close = None
+        # Decimal happily parses "NaN" and "Infinity"; a price must be finite and positive.
+        if close is None or not close.is_finite() or close <= 0:
+            _warn(f"prices line {line}: bad close {raw_close!r}; skipped")
+            continue
 
-            key = (raw_inst.upper(), day)
-            if key in by_key:
-                prev_close, prev_line = by_key[key]
-                if prev_close == close:
-                    _warn(f"prices line {line}: duplicate of line {prev_line}; ignored")
-                    continue
-                raise AlertError(
-                    f"prices lines {prev_line} and {line}: conflicting closes for "
-                    f"{raw_inst} on {day} ({prev_close} vs {close})"
-                )
-            by_key[key] = (close, line)
+        key = (raw_inst.upper(), day)
+        if key in by_key:
+            prev_close, prev_line = by_key[key]
+            if prev_close == close:
+                _warn(f"prices line {line}: duplicate of line {prev_line}; ignored")
+                continue
+            raise AlertError(
+                f"prices lines {prev_line} and {line}: conflicting closes for "
+                f"{raw_inst} on {day} ({prev_close} vs {close})"
+            )
+        by_key[key] = (close, line)
 
     series: Dict[str, Series] = {}
     for (inst, day), (close, _) in by_key.items():
@@ -234,20 +256,25 @@ def ma_signals(series: Series, rule: MaCrossRule):
     Prices are Decimal, so sums are exact (floats are not: see the tie test).
     Comparing sum_short * long with sum_long * short avoids division entirely.
     """
-    closes = [c for _, c in series]
+    # prefix[k] = sum of the first k closes, so any window sum is one subtraction.
+    prefix = [Decimal(0)]
+    for _, close in series:
+        prefix.append(prefix[-1] + close)
     out = []
     for i, (day, _) in enumerate(series):
-        if i + 1 < rule.long:
+        end = i + 1  # number of rows up to and including today
+        if end < rule.long:
             out.append((day, None))
             continue
-        sum_short = sum(closes[i + 1 - rule.short:i + 1])
-        sum_long = sum(closes[i + 1 - rule.long:i + 1])
+        sum_short = prefix[end] - prefix[end - rule.short]
+        sum_long = prefix[end] - prefix[end - rule.long]
         out.append((day, sum_short * rule.long - sum_long * rule.short))
     return out
 
 
-def evaluate(series_by_instrument: Dict[str, Series], rules: list) -> List[str]:
-    alerts = []  # (day, rule_id, line)
+def evaluate(series_by_instrument: Dict[str, Series], rules: list) -> List[Tuple[str, str, str, str]]:
+    """Return fired alerts as (date, rule_id, instrument, description), sorted by date then rule id."""
+    alerts = []
     for rule in rules:
         series = series_by_instrument.get(rule.instrument.upper())
         if series is None:
@@ -255,9 +282,21 @@ def evaluate(series_by_instrument: Dict[str, Series], rules: list) -> List[str]:
             continue
         signals = level_signals(series, rule) if isinstance(rule, LevelRule) else ma_signals(series, rule)
         for day in crossing_days(signals, rule.direction):
-            alerts.append((day, rule.id, f"{day.isoformat()} {rule.id} {rule.instrument} {rule.describe()}"))
+            alerts.append((day.isoformat(), rule.id, rule.instrument, rule.describe()))
     alerts.sort(key=lambda a: (a[0], a[1]))
-    return [line for _, _, line in alerts]
+    return alerts
+
+
+def format_alerts(alerts) -> List[str]:
+    """Columns separated by two spaces; rule id and instrument padded to the widest value.
+
+    This reproduces the brief's example byte for byte:
+        2026-09-03  r1  INFY  level below 1500
+        2026-09-24  r2  TCS   ma_cross 5/20 above
+    """
+    id_width = max((len(a[1]) for a in alerts), default=0)
+    inst_width = max((len(a[2]) for a in alerts), default=0)
+    return [f"{d}  {rid.ljust(id_width)}  {inst.ljust(inst_width)}  {desc}" for d, rid, inst, desc in alerts]
 
 
 def main(argv: List[str]) -> int:
@@ -267,7 +306,7 @@ def main(argv: List[str]) -> int:
     try:
         rules = load_rules(argv[1])
         prices = load_prices(argv[0])
-        lines = evaluate(prices, rules)
+        lines = format_alerts(evaluate(prices, rules))
     except AlertError as e:
         print(f"error: {e}", file=sys.stderr)
         return 2

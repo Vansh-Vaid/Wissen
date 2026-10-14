@@ -2,41 +2,37 @@
 
 ```
 python alerts.py examples/prices.csv examples/rules.json   # run
-python -m unittest                                          # 51 tests
+python -m unittest                                          # 95 tests
 ```
-**Install:** nothing. Python 3.9+ standard library only (developed and tested on 3.13).
-Alerts go to **stdout**; warnings to **stderr**. Exit `0` = success (even with warnings), `2` = fatal error.
+Nothing to install: Python 3.9+ standard library (tested on 3.13). Alerts go to stdout, warnings to stderr. Exit 0 = success (even with warnings), exit 2 = fatal error.
 
 ## Decisions where the brief is open
-| Question | Decision |
-|---|---|
-| Level rule: fire once ever, or on every crossing? | Every crossing. It fires on the day the close moves to the target side, not on the days it stays there. |
-| Close exactly equal to the level | Not crossed. `below` means `close < level`; `1510 → 1500 → 1510` never fires. |
-| First day of an instrument | Never fires: there is no previous day to be "on the other side". |
-| MA window | The instrument's own trading rows sorted by date (not calendar days). Defined only after `long` rows. Both today's and yesterday's MAs must exist, so the earliest alert is row `long + 1`. |
-| MA tie (`short == long`) | Not crossed. `above` fires when yesterday `short ≤ long` and today `short > long`. |
-| Number precision | `Decimal`, never `float`. Floats turn exact ties into false crosses (see `test_exact_tie_that_floats_get_wrong`). |
-| Output order | Date, then rule id as a plain string (so `r10` sorts before `r2`). |
-| Instrument names | Whitespace trimmed, matched case-insensitively; output uses the rule's spelling. |
+- **Level** fires on *every* crossing (the day the close moves to the target side), not while it stays there. Equal to the level is *not* crossed. The first row of an instrument never fires.
+- **MA** windows count the instrument's own trading rows, not calendar days. Both today's and yesterday's MAs must exist, so the earliest alert is row `long+1`. A tie is not a cross.
+- **"Previous day"** means the previous trading row, even across missing dates. Skipped bad rows don't count towards MA windows.
+- **Precision:** `Decimal`, never `float`. Floats turn exact ties into false crosses.
+- **Output** matches the brief byte for byte: columns separated by two spaces, id and instrument padded to the widest value (measured from the PDF). Sorted by date, then rule id as a string (`r10` before `r2`).
+- **Names:** tickers trimmed and case-insensitive; `type`/`direction` case-insensitive.
 
-## Bad data policy
-- **Bad price row** (bad date, non-ISO date, empty / non-numeric / NaN / Infinity / ≤0 close, `"1,520.50"`, missing fields) → warning with line number, row skipped, run continues.
-- **Exact duplicate row** → warning, kept once. **Same instrument and date with different closes** → fatal: the tool can't know which is right, and guessing would produce wrong alerts silently.
-- **Invalid rules** (unknown type or direction, non-integer or `true` windows, `short ≥ long`, duplicate ids, bad JSON) → fatal, with a message naming the rule.
-- **Rule for an instrument with no prices** → warning; other rules still run.
-- **Headers:** BOM, CRLF, extra spaces, any case, any column order and extra columns are accepted.
+## Bad data
+- **Bad row** (bad or non-ISO date, empty, non-numeric, NaN, ≤0 or `"1,520.50"` close, missing fields, repeated header) → warning with line number, skipped.
+- **Exact duplicate** → kept once. **Same instrument and date with different closes** → fatal: guessing would give silently wrong alerts.
+- **Invalid rule** (unknown type, `short ≥ long`, `true` or `5.5` window, duplicate id, bad JSON) → fatal, naming the rule.
+- **Rule for an instrument with no prices** → warning.
+- **Accepted:** BOM, CRLF, quotes, any header case or column order, extra or missing trailing columns. Non-UTF-8 is read as Latin-1 with a warning.
 
 ## Verification
-- `tests/test_engine.py`: crossing logic per rule type, including hand-computed MA examples (worked out in comments) and 300 random series checked against a deliberately naive reference implementation using exact `Fraction`s.
-- `tests/test_inputs.py`: every bad-data case listed above.
-- `tests/test_cli.py`: end-to-end runs, including the brief's exact example, shuffled input, ordering, exit codes, and no tracebacks.
-- **Mutation check:** I planted 9 typical bugs one at a time and confirmed the suite fails for each: firing every day below, `>=` for crossing, firing on the first day, no date sort, float prices, MA before the window is full, accepting NaN, wrong sort key, accepting `true` as a window.
-- The bundled example's `r2` alert (2026-10-05: MA5 = 3850 > MA20 = 3833.5, previous day 3827.2 < 3832.3) was checked by hand.
+- **Tests,** split by focus: `test_engine` (crossing logic; 300 random series against a naive `Fraction` reference), `test_inputs` (each bad-data case), `test_cli` (end to end), and `test_brief_scenarios` (grouped by sentence of the brief).
+- **Brief fixture:** `fixtures/brief_full_prices.csv` keeps the brief's five rows and adds history, so the tool prints **exactly the brief's two output lines**: r2 on 09-24, with a near-miss on 09-23 (MA5 3911.0 vs MA20 3911.0625).
+- **Mutation check:** I planted 18 typical bugs (firing every day, `>=`, MA window off by one, floats, wrong sort, single spaces, …) and confirmed the tests fail for each.
+- **By hand:** MA values checked for the example alerts. 60k rows run in about 1s.
 
 ## How I used the AI assistant
-Prompts in brief: *"understand the problem statement and come up with a build idea as a senior software engineer"*, which produced the design and the edge-case list; then *"act as a senior engineer"*, which produced the implementation, tests and README.
+Prompts in brief: *"understand the problem statement and come up with a build idea as a senior engineer"* (design and edge-case list), *"act as a senior engineer"* (code, tests, README), and *"test with custom edge cases matching the PDF"* (scenario tests, exact output format, speed-up).
 
 **What it got wrong, and what changed:**
-1. **A false claim about ties.** It wrote a test and a docstring saying `Decimal` division could turn an exact MA tie into a false cross. The test case wasn't even a tie (MA1 = 10 vs MA3 = 16/3). On checking, correctly rounded division maps equal values to the same result, so the claim was false. The real risk is **float addition**, so the test was replaced with a concrete float failure (1675.805 vs 1675.8049999999998).
-2. **That float test then failed**, because Python 3.12+ `sum()` uses compensated summation and hides the error. The test now adds left to right explicitly, as a normal loop would.
-3. **The ordering test couldn't catch a wrong sort key.** Rule ids happened to be in date order, so sorting by id first also passed. The mutation check found this, and the test data was changed so the two orders differ.
+1. It claimed `Decimal` division could break MA ties; its example wasn't even a tie. The real risk is float *addition*, so the test now shows a concrete float failure.
+2. That float test passed vacuously on Python 3.12+, whose `sum()` compensates rounding. It now adds left to right explicitly.
+3. The ordering test used ids already in date order, so a wrong sort key passed. The mutation check caught it, and the data was changed.
+4. Output used single spaces, because PDF text extraction collapses them. Measured word positions showed padded columns, and the output was fixed.
+5. A hand calculation expected an MA cross on day 6. It was an exact tie (MA2 = MA3 = 10), so the cross is day 7. The tool was right and the test was wrong.
