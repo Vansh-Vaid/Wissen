@@ -1,15 +1,13 @@
 # Price Alert Tool
 
-Give it daily closing prices and alert rules, and it tells you which alerts fired on which day.
+Give it daily closing prices and alert rules, and it tells you which alerts fired on which day. You need Python 3.9 or newer; there is nothing to install.
 
 ## Running it
-You need Python 3.9 or newer. Nothing to install.
-
 ```
 python alerts.py prices.csv rules.json
 python -m unittest
 ```
-The tests also run the 10 cases in `samples/` (prices, rules and expected output for each).
+`prices.csv` and `rules.json` are the brief's example: only `r1` fires, since TCS has 2 days (`samples/01_brief_example` adds history and gives both lines).
 
 ## How it works
 Both rules boil down to one question: *did a number cross zero today?*

@@ -152,6 +152,14 @@ class TestReadingFiles(unittest.TestCase):
 
 
 class TestSamples(unittest.TestCase):
+    def test_brief_example_files_in_the_project_folder(self):
+        # TCS has only 2 days, so the 5/20 rule cannot fire yet; only r1 prints.
+        command = [sys.executable, os.path.join(HERE, "alerts.py"),
+                   os.path.join(HERE, "prices.csv"), os.path.join(HERE, "rules.json")]
+        result = subprocess.run(command, capture_output=True, text=True)
+        self.assertEqual(result.stdout, "2026-09-03  r1  INFY  level below 1500\n")
+        self.assertEqual(result.stderr, "")
+
     def test_every_sample_gives_its_expected_output(self):
         for name in sorted(os.listdir(SAMPLES)):
             with self.subTest(sample=name):
