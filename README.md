@@ -19,7 +19,7 @@ MA2      -   10  8.5  8.5 11.5
 MA3      -    -    9    9   10     MA2 goes over MA3 on day 5 -> alert
 ```
 
-**Output.** One line per alert, sorted by date then rule id, columns lined up as in the brief. Days with no alerts print nothing.
+**Output.** One line per alert, sorted by date then rule id, tickers in capitals, columns lined up as in the brief. Days with no alerts print nothing.
 ```
 2026-09-03  r1  INFY  level below 1500
 2026-09-24  r2  TCS   ma_cross 5/20 above

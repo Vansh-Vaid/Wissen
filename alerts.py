@@ -177,7 +177,7 @@ def find_alerts(prices, rules):
             text = f"ma_cross {rule['short']}/{rule['long']} {rule['direction']}"
 
         for day in crossing_days(values, rule["direction"]):
-            alerts.append((day.isoformat(), rule["id"], rule["instrument"], text))
+            alerts.append((day.isoformat(), rule["id"], rule["instrument"].upper(), text))
 
     alerts.sort(key=lambda alert: (alert[0], alert[1]))
     return alerts

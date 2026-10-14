@@ -7,7 +7,8 @@ import unittest
 from datetime import date
 from decimal import Decimal
 
-from alerts import InputError, crossing_days, level_differences, ma_differences, read_prices, read_rules
+from alerts import (InputError, crossing_days, find_alerts, level_differences, ma_differences,
+                    read_prices, read_rules)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SAMPLES = os.path.join(HERE, "samples")
@@ -33,6 +34,10 @@ class TestRules(unittest.TestCase):
         values = level_differences(series("1520.50", "1534.10", "1498.00"), Decimal(1500))
         self.assertEqual(crossing_days(values, "below"), [sept(3)])
 
+    def test_level_crosses_above(self):
+        values = level_differences(series(1490, 1500, 1510, 1520), Decimal(1500))
+        self.assertEqual(crossing_days(values, "above"), [sept(3)])
+
     def test_staying_below_does_not_fire_again(self):
         values = level_differences(series(1510, 1490, 1480, 1470), Decimal(1500))
         self.assertEqual(crossing_days(values, "below"), [sept(2)])
@@ -48,6 +53,12 @@ class TestRules(unittest.TestCase):
     def test_from_the_level_to_below_is_a_cross(self):
         values = level_differences(series(1500, "1499.99"), Decimal(1500))
         self.assertEqual(crossing_days(values, "below"), [sept(2)])
+
+    def test_ticker_is_printed_in_capitals(self):
+        rule = {"id": "r1", "instrument": "infy", "type": "level", "direction": "below",
+                "level": Decimal(1500), "level_text": "1500"}
+        alerts = find_alerts({"INFY": series(1510, 1490)}, [rule])
+        self.assertEqual(alerts, [("2026-09-02", "r1", "INFY", "level below 1500")])
 
     def test_ma_cross_worked_by_hand(self):
         # MA2 - MA3 from day 3: -0.5, -0.5, +1.5
