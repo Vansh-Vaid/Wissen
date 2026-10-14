@@ -10,13 +10,18 @@ stderr. Exit code 0 on success (even with warnings), 2 on a fatal error.
 import csv
 import io
 import json
+import re
 import sys
 from dataclasses import dataclass
 from datetime import date, datetime
-from decimal import MAX_PREC, Decimal, InvalidOperation, localcontext
+from decimal import MAX_PREC, Decimal, localcontext
 from typing import Dict, List, Optional, Tuple
 
 DIRECTIONS = ("above", "below")
+
+# Plain ASCII decimal number: 1520, +1520.50, .5, 1.5E3. Decimal() alone would
+# also accept "1_520", "NaN", "Infinity" and non-ASCII digits such as "١٥٢٠".
+NUMBER = re.compile(r"[+-]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]+)?")
 
 
 class AlertError(Exception):
@@ -196,14 +201,10 @@ def load_prices(path: str) -> Dict[str, Series]:
             if not raw_inst:
                 _warn(f"prices line {line}: empty instrument; skipped")
                 continue
-            try:
-                close = Decimal(raw_close)
-            except InvalidOperation:
-                close = None
-            # Decimal happily parses "NaN", "Infinity" and "1e-999999"; a price must be
-            # finite, positive and plausibly sized (<= 15 integer digits, <= 30 decimals).
-            if (close is None or not close.is_finite() or close <= 0
-                    or close.adjusted() >= 15 or close.as_tuple().exponent < -30):
+            close = Decimal(raw_close) if NUMBER.fullmatch(raw_close) else None
+            # A price must be positive and plausibly sized (<= 15 integer digits,
+            # <= 30 decimals): "1e-999999" is valid syntax but not a price.
+            if close is None or close <= 0 or close.adjusted() >= 15 or close.as_tuple().exponent < -30:
                 _warn(f"prices line {line}: bad close {raw_close!r}; skipped")
                 continue
 

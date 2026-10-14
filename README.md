@@ -2,7 +2,7 @@
 
 ```
 python alerts.py examples/prices.csv examples/rules.json   # run
-python -m unittest                                          # 100 tests
+python -m unittest                                          # 137 tests
 ```
 Nothing to install: Python 3.9+ standard library (tests pass on 3.9 to 3.13). Alerts go to stdout, warnings to stderr; exit 0 = success, 2 = fatal error. Step-by-step instructions are in **[GUIDE.md](GUIDE.md)**.
 
@@ -22,7 +22,7 @@ Nothing to install: Python 3.9+ standard library (tests pass on 3.9 to 3.13). Al
 - **Accepted:** BOM, CRLF, quotes, any header case or column order, extra or missing trailing columns. Non-UTF-8 is read as Latin-1 with a warning.
 
 ## Verification
-- **Tests,** split by focus: `test_engine` (crossing logic; 500 random series, some with 33-digit prices, against a naive `Fraction` reference), `test_inputs` (each bad-data case), `test_cli` (end to end), and `test_brief_scenarios` (grouped by sentence of the brief).
+- **Tests,** split by focus: `test_engine` (crossing logic; 500 random series, some with 33-digit prices, against a naive `Fraction` reference), `test_inputs` (each bad-data case), `test_cli` (end to end), `test_brief_scenarios` (grouped by sentence of the brief), `test_properties` (random-data invariants: same alerts after rupee→paise scaling, price shifts, mirroring, row order), and `test_more_edge_cases`.
 - **Brief fixture:** `fixtures/brief_full_prices.csv` keeps the brief's five rows and adds history, so the tool prints **exactly the brief's two output lines**: r2 on 09-24, with a near-miss on 09-23 (MA5 3911.0 vs MA20 3911.0625).
 - **Mutation check:** across two rounds I planted 29 typical bugs (firing every day, `>=`, MA window off by one, floats, wrong sort, single spaces, …); the tests fail for each.
 - **By hand:** MA values checked for the example alerts.

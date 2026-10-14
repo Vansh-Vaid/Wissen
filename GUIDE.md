@@ -100,7 +100,7 @@ date,instrument,close
 - **Required columns:** `date`, `instrument`, `close`, in any order and any case. Extra columns are ignored.
 - **`date`:** `YYYY-MM-DD`. Rows may be in any order; the tool sorts them.
 - **`close`:** a positive number such as `1520.50`. Don't use thousands separators.
-- **Rows the tool skips, with a `warning:` naming the line:** a bad date, a non-numeric, empty, `NaN`, zero or negative close, an implausible close (more than 15 integer digits or 30 decimal places), or a missing instrument.
+- **Rows the tool skips, with a `warning:` naming the line:** a bad date, a non-numeric (including `₹1490` or `1_490`), empty, `NaN`, zero or negative close, an implausible close (more than 15 integer digits or 30 decimal places), or a missing instrument.
 - **Duplicates:** an exact duplicate row is used once. Two *different* closes for the same instrument and date stop the tool (exit 2), because it can't know which one is right.
 
 ### Rules: JSON list
@@ -131,7 +131,7 @@ date,instrument,close
 ## 5. Run the tests
 
 ```bash
-python -m unittest            # all 100 tests, about 5 s
+python -m unittest            # all 137 tests, about 7 s
 python -m unittest -v         # list every test by name
 python -m unittest tests.test_brief_scenarios   # just one file
 ```
@@ -142,6 +142,8 @@ python -m unittest tests.test_brief_scenarios   # just one file
 | `tests/test_engine.py` | Crossing logic, ties, precision, and 500 random series checked against an independent reference implementation |
 | `tests/test_inputs.py` | Every kind of bad CSV row and invalid rule |
 | `tests/test_cli.py` | Running the real command: output, exit codes, no tracebacks |
+| `tests/test_properties.py` | Facts that must hold for any input (alerts unchanged by rescaling, shifting, mirroring or reordering; output always sorted and aligned), plus a level-rule reference check |
+| `tests/test_more_edge_cases.py` | Missing final newline, number spellings, currency symbols, timestamps, tab files, odd rule files, odd command lines |
 
 ---
 
@@ -203,7 +205,7 @@ During the questions, predict the output before pressing Enter.
 | Ordered by date, then rule id | `evaluate` sort | `test_ordering_by_date_then_rule_id` |
 | Print nothing on days with no alerts | no blank lines | `test_no_blank_lines_and_nothing_printed_when_nothing_fires` |
 | Runs from a clean download with one command; say what to install | nothing to install | fresh clone tested; Python 3.9 to 3.13 tested |
-| Includes tests; think about real data | 100 tests | `RealWorldPriceFiles`, `test_inputs` |
+| Includes tests; think about real data | 137 tests | `RealWorldPriceFiles`, `test_inputs` |
 | README of at most one page: run, prompts, what the AI got wrong, what changed | `README.md` | |
 | Submitted as a zip or repository link by 14:00 | see below | |
 
