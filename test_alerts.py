@@ -73,9 +73,9 @@ class TestReadingFiles(unittest.TestCase):
         self.folder = tempfile.TemporaryDirectory()
         self.addCleanup(self.folder.cleanup)
 
-    def write(self, name, text):
+    def write(self, name, text, encoding="utf-8"):
         path = os.path.join(self.folder.name, name)
-        with open(path, "w", newline="") as f:
+        with open(path, "w", newline="", encoding=encoding) as f:
             f.write(text)
         return path
 
@@ -87,6 +87,14 @@ class TestReadingFiles(unittest.TestCase):
         path = self.write("p.csv", "date,instrument,close\n2026-09-01,INFY,1520\n2026-09-01,INFY,1530\n")
         with self.assertRaises(InputError):
             read_prices(path)
+
+    def test_non_utf8_character_in_another_column_is_ignored(self):
+        path = self.write("p.csv", "date,instrument,close,note\n2026-09-01,INFY,1520,caf\xe9\n", encoding="latin-1")
+        self.assertEqual(read_prices(path)["INFY"], [(sept(1), Decimal(1520))])
+
+    def test_whole_number_rule_id_is_accepted(self):
+        rule = {"id": 7, "instrument": "INFY", "type": "level", "direction": "below", "level": 1500}
+        self.assertEqual(read_rules(self.write("r.json", json.dumps([rule])))[0]["id"], "7")
 
     def test_missing_column_is_an_error(self):
         path = self.write("p.csv", "date,instrument,price\n2026-09-01,INFY,1520\n")

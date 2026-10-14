@@ -38,7 +38,7 @@ def read_prices(path):
     prices = {}
     seen = {}
 
-    with open(path, newline="", encoding="utf-8-sig") as f:
+    with open(path, newline="", encoding="utf-8-sig", errors="replace") as f:
         reader = csv.reader(f)
         columns = find_columns(next(reader, []))
 
@@ -76,8 +76,10 @@ def check_rule(rule, used_ids):
         raise InputError(f"rule {rule!r} is not an object")
 
     rule_id = rule.get("id")
+    if is_whole_number(rule_id):
+        rule_id = str(rule_id)
     if not isinstance(rule_id, str) or not rule_id.strip():
-        raise InputError(f"rule {rule!r} has no id")
+        raise InputError(f"rule {rule!r} needs an id (text or a whole number)")
     rule_id = rule_id.strip()
     if rule_id in used_ids:
         raise InputError(f"rule id '{rule_id}' is used twice")
