@@ -59,6 +59,9 @@ class PricesTest(TempFiles, unittest.TestCase):
             ",INFY,10",                    # missing date
             "2026-09-09,,10",              # missing instrument
             "2026-09-10,INFY",             # too few fields
+            "2026-09-11,INFY,1e-1000000",  # absurd magnitude would make huge integers
+            "2026-09-12,INFY,1E+20",       # more than 15 integer digits
+            "2026-09-13,INFY,1." + "0" * 31,  # more than 30 decimal places
         ]
         text = HEADER + "2026-09-01,INFY,1\n" + "\n".join(bad_rows) + "\n"
         prices, warnings = self.load(text)
@@ -67,6 +70,13 @@ class PricesTest(TempFiles, unittest.TestCase):
         self.assertEqual(len(lines), len(bad_rows))
         for n, line in enumerate(lines, start=3):
             self.assertIn(f"line {n}:", line)
+
+    def test_plausible_extremes_are_accepted(self):
+        text = HEADER + "2026-09-01,A,0.000001\n2026-09-01,B,999999999999999\n2026-09-01,C,1.5E3\n" \
+               "2026-09-01,D,1." + "0" * 29 + "1\n"
+        prices, warnings = self.load(text)
+        self.assertEqual(sorted(prices), ["A", "B", "C", "D"])
+        self.assertEqual(warnings, "")
 
     def test_exact_duplicate_row_is_dropped_with_warning(self):
         prices, warnings = self.load(HEADER + "2026-09-01,INFY,1520.5\n2026-09-01,INFY,1520.50\n")

@@ -296,6 +296,15 @@ class RealWorldPriceFiles(Scenario):
         self.assertIn("NIFTY 50", out[1])
         self.assertEqual(len(out), 3)
 
+    def test_output_to_a_non_utf8_console_does_not_crash(self):
+        # A Windows console / redirected file in cp1252 cannot encode Cyrillic or the rupee sign.
+        prices = self.write("p.csv", csv_rows(*daily("ТЕСТ₹", [110, 90])))
+        rules = self.write("r.json", [level("u", "ТЕСТ₹", "below", 100)])
+        env = dict(os.environ, PYTHONIOENCODING="cp1252")
+        result = subprocess.run([sys.executable, SCRIPT, prices, rules], capture_output=True, env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.split()[:2], [b"2026-09-02", b"u"])
+
     def test_instruments_without_rules_are_ignored(self):
         text = csv_rows(*daily("INFY", [1510, 1490]), *daily("WIPRO", [1, 2, 3]))
         self.assertEqual(self.alerts(text, self.RULE), self.EXPECTED)

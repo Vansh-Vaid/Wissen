@@ -13,7 +13,7 @@ import json
 import sys
 from dataclasses import dataclass
 from datetime import date, datetime
-from decimal import Decimal, InvalidOperation
+from decimal import MAX_PREC, Decimal, InvalidOperation, localcontext
 from typing import Dict, List, Optional, Tuple
 
 DIRECTIONS = ("above", "below")
@@ -147,6 +147,13 @@ def load_rules(path: str) -> list:
 Series = List[Tuple[date, Decimal]]  # one instrument, sorted by date
 
 
+def _parse_date(text: str) -> Optional[date]:
+    try:
+        return datetime.strptime(text, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
 def load_prices(path: str) -> Dict[str, Series]:
     """Return {INSTRUMENT: [(date, close), ...] sorted by date}.
 
@@ -158,6 +165,7 @@ def load_prices(path: str) -> Dict[str, Series]:
     text = _read_text(path, "prices")
 
     by_key: Dict[Tuple[str, date], Tuple[Decimal, int]] = {}
+    dates: Dict[str, Optional[date]] = {}  # parse each distinct date string once
     reader = csv.reader(io.StringIO(text, newline=""))
     header = next(reader, None)
     if header is None:
@@ -169,49 +177,49 @@ def load_prices(path: str) -> Dict[str, Series]:
     i_date, i_inst, i_close = (columns.index(c) for c in ("date", "instrument", "close"))
     needed = max(i_date, i_inst, i_close) + 1  # trailing optional columns may be absent
 
-    while True:
-        try:
-            row = next(reader, None)
-        except csv.Error as e:
-            raise AlertError(f"prices line {reader.line_num}: unreadable CSV ({e})")
-        if row is None:
-            break
-        line = reader.line_num
-        if not any(cell.strip() for cell in row):
-            continue  # blank line
-        if len(row) < needed:
-            _warn(f"prices line {line}: expected {len(columns)} fields, got {len(row)}; skipped")
-            continue
-
-        raw_date, raw_inst, raw_close = row[i_date].strip(), row[i_inst].strip(), row[i_close].strip()
-        try:
-            day = datetime.strptime(raw_date, "%Y-%m-%d").date()
-        except ValueError:
-            _warn(f"prices line {line}: bad date {raw_date!r} (expected YYYY-MM-DD); skipped")
-            continue
-        if not raw_inst:
-            _warn(f"prices line {line}: empty instrument; skipped")
-            continue
-        try:
-            close = Decimal(raw_close)
-        except InvalidOperation:
-            close = None
-        # Decimal happily parses "NaN" and "Infinity"; a price must be finite and positive.
-        if close is None or not close.is_finite() or close <= 0:
-            _warn(f"prices line {line}: bad close {raw_close!r}; skipped")
-            continue
-
-        key = (raw_inst.upper(), day)
-        if key in by_key:
-            prev_close, prev_line = by_key[key]
-            if prev_close == close:
-                _warn(f"prices line {line}: duplicate of line {prev_line}; ignored")
+    try:
+        for row in reader:
+            line = reader.line_num
+            if not "".join(row).strip():
+                continue  # blank line
+            if len(row) < needed:
+                _warn(f"prices line {line}: expected {len(columns)} fields, got {len(row)}; skipped")
                 continue
-            raise AlertError(
-                f"prices lines {prev_line} and {line}: conflicting closes for "
-                f"{raw_inst} on {day} ({prev_close} vs {close})"
-            )
-        by_key[key] = (close, line)
+
+            raw_date, raw_inst, raw_close = row[i_date].strip(), row[i_inst].strip(), row[i_close].strip()
+            day = dates.get(raw_date, False)
+            if day is False:
+                day = dates[raw_date] = _parse_date(raw_date)
+            if day is None:
+                _warn(f"prices line {line}: bad date {raw_date!r} (expected a real date as YYYY-MM-DD); skipped")
+                continue
+            if not raw_inst:
+                _warn(f"prices line {line}: empty instrument; skipped")
+                continue
+            try:
+                close = Decimal(raw_close)
+            except InvalidOperation:
+                close = None
+            # Decimal happily parses "NaN", "Infinity" and "1e-999999"; a price must be
+            # finite, positive and plausibly sized (<= 15 integer digits, <= 30 decimals).
+            if (close is None or not close.is_finite() or close <= 0
+                    or close.adjusted() >= 15 or close.as_tuple().exponent < -30):
+                _warn(f"prices line {line}: bad close {raw_close!r}; skipped")
+                continue
+
+            key = (raw_inst.upper(), day)
+            if key in by_key:
+                prev_close, prev_line = by_key[key]
+                if prev_close == close:
+                    _warn(f"prices line {line}: duplicate of line {prev_line}; ignored")
+                    continue
+                raise AlertError(
+                    f"prices lines {prev_line} and {line}: conflicting closes for "
+                    f"{raw_inst} on {day} ({prev_close} vs {close})"
+                )
+            by_key[key] = (close, line)
+    except csv.Error as e:
+        raise AlertError(f"prices line {reader.line_num}: unreadable CSV ({e})")
 
     series: Dict[str, Series] = {}
     for (inst, day), (close, _) in by_key.items():
@@ -234,13 +242,11 @@ def crossing_days(signals: List[Tuple[date, Optional[Decimal]]], direction: str)
     fires only if both it and the previous day are defined, the previous day
     was not on the target side, and this day is.
     """
-    def on_side(v: Decimal) -> bool:
-        return v > 0 if direction == "above" else v < 0
-
+    sign = 1 if direction == "above" else -1  # "below" is "above" with the sign flipped
     fired = []
     prev = None
     for day, value in signals:
-        if value is not None and prev is not None and not on_side(prev) and on_side(value):
+        if value is not None and prev is not None and prev * sign <= 0 < value * sign:
             fired.append(day)
         prev = value
     return fired
@@ -250,37 +256,59 @@ def level_signals(series: Series, rule: LevelRule):
     return [(day, close - rule.level) for day, close in series]
 
 
-def ma_signals(series: Series, rule: MaCrossRule):
+def prefix_sums(series: Series) -> List[int]:
+    """prefix[k] = sum of the first k closes, so any window sum is one subtraction.
+
+    Closes are scaled to exact integers first (1520.50 -> 152050 for two
+    decimals): integer arithmetic is several times faster than Decimal, and
+    multiplying every close by the same positive number cannot change which
+    moving average is larger.
+    """
+    places = max((-c.as_tuple().exponent for _, c in series), default=0)
+    places = max(places, 0)
+    prefix = [0]
+    total = 0
+    with localcontext() as ctx:
+        ctx.prec = MAX_PREC  # scaleb rounds to 28 digits by default; keep it exact
+        for _, close in series:
+            total += int(close.scaleb(places))
+            prefix.append(total)
+    return prefix
+
+
+def ma_signals(series: Series, rule: MaCrossRule, prefix: Optional[List[int]] = None):
     """Signal whose sign is sign(MA_short - MA_long), None until `long` days exist.
 
-    Prices are Decimal, so sums are exact (floats are not: see the tie test).
-    Comparing sum_short * long with sum_long * short avoids division entirely.
+    Sums are exact integers (floats are not: see the tie test), and comparing
+    sum_short * long with sum_long * short avoids division entirely.
     """
-    # prefix[k] = sum of the first k closes, so any window sum is one subtraction.
-    prefix = [Decimal(0)]
-    for _, close in series:
-        prefix.append(prefix[-1] + close)
-    out = []
-    for i, (day, _) in enumerate(series):
-        end = i + 1  # number of rows up to and including today
-        if end < rule.long:
-            out.append((day, None))
-            continue
-        sum_short = prefix[end] - prefix[end - rule.short]
-        sum_long = prefix[end] - prefix[end - rule.long]
-        out.append((day, sum_short * rule.long - sum_long * rule.short))
+    if prefix is None:
+        prefix = prefix_sums(series)
+    short, long_ = rule.short, rule.long
+    out = [(day, None) for day, _ in series[:long_ - 1]]  # window not full yet
+    for end in range(long_, len(series) + 1):  # end = rows up to and including today
+        sum_short = prefix[end] - prefix[end - short]
+        sum_long = prefix[end] - prefix[end - long_]
+        out.append((series[end - 1][0], sum_short * long_ - sum_long * short))
     return out
 
 
 def evaluate(series_by_instrument: Dict[str, Series], rules: list) -> List[Tuple[str, str, str, str]]:
     """Return fired alerts as (date, rule_id, instrument, description), sorted by date then rule id."""
     alerts = []
+    prefixes: Dict[str, List[int]] = {}  # shared by all MA rules on one instrument
     for rule in rules:
         series = series_by_instrument.get(rule.instrument.upper())
         if series is None:
             _warn(f"rule '{rule.id}': no prices for instrument {rule.instrument}")
             continue
-        signals = level_signals(series, rule) if isinstance(rule, LevelRule) else ma_signals(series, rule)
+        if isinstance(rule, LevelRule):
+            signals = level_signals(series, rule)
+        else:
+            key = rule.instrument.upper()
+            if key not in prefixes:
+                prefixes[key] = prefix_sums(series)
+            signals = ma_signals(series, rule, prefixes[key])
         for day in crossing_days(signals, rule.direction):
             alerts.append((day.isoformat(), rule.id, rule.instrument, rule.describe()))
     alerts.sort(key=lambda a: (a[0], a[1]))
@@ -300,6 +328,10 @@ def format_alerts(alerts) -> List[str]:
 
 
 def main(argv: List[str]) -> int:
+    # A Windows console or redirected file may not encode every ticker; never crash on output.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
     if len(argv) != 2:
         print("usage: python alerts.py PRICES.csv RULES.json", file=sys.stderr)
         return 2

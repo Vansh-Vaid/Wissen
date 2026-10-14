@@ -88,6 +88,12 @@ class MaCrossRuleTest(unittest.TestCase):
         # Flat prices make MA2 == MA3 exactly; the first real move above fires.
         self.assertEqual(fires_ma([10, 10, 10, 10, 11], "above", 2, 3), [day(4)])
 
+    def test_one_signal_per_row_undefined_until_long_rows(self):
+        s = series(10, 10, 7, 10, 13)
+        signals = ma_signals(s, MaCrossRule("r", "X", "above", 2, 3))
+        self.assertEqual([d for d, _ in signals], [d for d, _ in s])
+        self.assertEqual([v is None for _, v in signals], [True, True, False, False, False])
+
     def test_exact_tie_that_floats_get_wrong(self):
         # On the last day MA2 == MA4 == 1675.805 exactly, so nothing may fire.
         # With floats, MA2 = 1675.805 but MA4 = 1675.8049999999998: a false cross.
@@ -115,6 +121,16 @@ def reference_ma_cross(closes, direction, short, long_):
     return fired
 
 
+def random_close(rng):
+    """Mostly paise prices; sometimes whole numbers or very long decimals."""
+    kind = rng.random()
+    if kind < 0.6:
+        return f"{rng.randint(9500, 10500) / 100:.2f}"
+    if kind < 0.8:
+        return str(rng.randint(95, 105))
+    return f"100.{rng.randint(0, 10**30):030d}"  # 33 significant digits
+
+
 class MaCrossAgainstReferenceTest(unittest.TestCase):
     def test_random_series_match_reference(self):
         rng = random.Random(1234)
@@ -129,6 +145,25 @@ class MaCrossAgainstReferenceTest(unittest.TestCase):
                     fires_ma(closes, direction, short, long_),
                     reference_ma_cross(closes, direction, short, long_),
                 )
+
+    def test_mixed_and_very_long_decimal_places_match_reference(self):
+        rng = random.Random(99)
+        for _ in range(200):
+            short = rng.randint(1, 5)
+            long_ = rng.randint(short + 1, 10)
+            closes = [random_close(rng) for _ in range(rng.randint(0, 30))]
+            direction = rng.choice(["above", "below"])
+            with self.subTest(closes=closes, short=short, long=long_, direction=direction):
+                self.assertEqual(
+                    fires_ma(closes, direction, short, long_),
+                    reference_ma_cross(closes, direction, short, long_),
+                )
+
+    def test_tie_hidden_beyond_28_significant_digits(self):
+        # MA1 vs MA2 differ only in the 31st significant digit on the last day:
+        # 100.000...0002 vs (100.000...0001 + 100.000...0002) / 2. Must still fire.
+        a, b = "100." + "0" * 29 + "1", "100." + "0" * 29 + "2"
+        self.assertEqual(fires_ma([a, a, b], "above", 1, 2), [day(2)])
 
 
 if __name__ == "__main__":
