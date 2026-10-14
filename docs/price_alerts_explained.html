@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Price Alerts Explained</title>
+<style>
+:root {
+  --bg:#fbfaf7; --card:#ffffff; --ink:#1d2433; --muted:#5c6577; --line:#e4e1d9;
+  --price:#2f6fdf; --fast:#e0762a; --slow:#2a9d6a; --level:#7b5cd6; --alert:#d6336c; --touch:#8a8f99;
+  --cell:#eef3fd; --off:#eceae4; --on:#d9f0e5; --code:#f2f0ea;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg:#14171d; --card:#1c2029; --ink:#e7e9ee; --muted:#9aa3b2; --line:#2c323d;
+  --price:#6f9bff; --fast:#ff9b55; --slow:#4cc796; --level:#a990ff; --alert:#ff6b9a; --touch:#7d8594;
+  --cell:#1f2a40; --off:#262b35; --on:#183a2c; --code:#252a34; } }
+* { box-sizing:border-box }
+body { margin:0; background:var(--bg); color:var(--ink); font:17px/1.6 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif }
+main { max-width:760px; margin:0 auto; padding:32px 16px 64px }
+h1 { font-size:2rem; line-height:1.2; margin:0 0 6px }
+h2 { font-size:1.35rem; margin:44px 0 10px; padding-top:8px; border-top:1px solid var(--line) }
+.lead { color:var(--muted); margin:0 0 24px }
+.card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 18px 10px; margin:16px 0 }
+.big { font-size:1.12rem }
+.rule { white-space:pre-wrap; background:var(--code); border-radius:10px; padding:12px 14px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.92rem; overflow-x:auto }
+.chart { width:100%; height:auto; display:block }
+.grid { stroke:var(--line); stroke-width:1 }
+.axis { fill:var(--muted); font-size:12px }
+.level { stroke:var(--level); stroke-width:2; stroke-dasharray:6 5 }
+.level-label { fill:var(--level); font-size:13px; font-weight:600 }
+.price { fill:none; stroke:var(--price); stroke-width:2.5 } .price-dot { fill:var(--price) }
+.price-thin { fill:none; stroke:var(--price); stroke-width:1.2; opacity:.45 }
+.fast { fill:none; stroke:var(--fast); stroke-width:2.6 }
+.slow { fill:none; stroke:var(--slow); stroke-width:2.6 }
+.alert { fill:none; stroke:var(--alert); stroke-width:3 }
+.alert-label { fill:var(--alert); font-size:13px; font-weight:700 }
+.touch { fill:none; stroke:var(--touch); stroke-width:2; stroke-dasharray:3 3 }
+.touch-label { fill:var(--touch); font-size:12px }
+.cell { fill:var(--cell); stroke:var(--price); stroke-width:1 }
+.cell-text { fill:var(--ink); font-size:18px; font-weight:600 }
+.br-fast { fill:none; stroke:var(--fast); stroke-width:2.5 } .br-fast-text { fill:var(--fast); font-size:14px; font-weight:600 }
+.br-slow { fill:none; stroke:var(--slow); stroke-width:2.5 } .br-slow-text { fill:var(--slow); font-size:14px; font-weight:600 }
+.note { fill:var(--muted); font-size:14px }
+.day-off { fill:var(--off) } .day-on { fill:var(--on) } .day-alert { fill:var(--alert) }
+.day-num { fill:var(--ink); font-size:11px }
+.legend { display:flex; flex-wrap:wrap; gap:16px; font-size:.9rem; color:var(--muted); margin:4px 0 10px }
+.legend .sw { display:inline-block; width:18px; height:4px; border-radius:2px; margin-right:6px; vertical-align:middle }
+.sw.price { background:var(--price) } .sw.fast { background:var(--fast) } .sw.slow { background:var(--slow) }
+.sw.level { background:var(--level) } .sw.alert { background:var(--alert) }
+.grid4 { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:12px }
+figure.mini { margin:0; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 12px }
+figure.mini figcaption { font-weight:700 }
+figure.mini p { margin:4px 0 6px; font-size:.95rem; color:var(--muted) }
+table { border-collapse:collapse; width:100%; font-size:.95rem; margin:8px 0 }
+th, td { border-bottom:1px solid var(--line); padding:7px 8px; text-align:left }
+tr.hit td { color:var(--alert); font-weight:700 }
+.tag { display:inline-block; padding:1px 8px; border-radius:99px; background:var(--code); font-size:.85rem }
+details { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 14px; margin:8px 0 }
+summary { cursor:pointer; font-weight:600 }
+code { font-family:ui-monospace,Menlo,Consolas,monospace; background:var(--code); padding:1px 5px; border-radius:5px; font-size:.9em }
+</style></head>
+<body><main>
+
+<h1>Price alerts, explained simply</h1>
+<p class="lead">Two kinds of rule, one idea: <b>tell me on the day something crosses a line.</b></p>
+
+<div class="card big">
+Imagine drawing a line on a price chart. The tool watches the price day by day and shouts
+<b>“alert!”</b> only on the day the price <b>jumps from one side of the line to the other</b>.
+Not before, not after, not while it stays on the new side.
+</div>
+
+<h2>Rule 1: the level rule</h2>
+<div class="rule">{"id": "r1", "instrument": "INFY", "type": "level", "direction": "below", "level": 1500}</div>
+<p>In plain words: <b>“Tell me the day INFY drops below ₹1500.”</b> The line is a fixed price, 1500.</p>
+
+<div class="legend"><span><i class="sw price"></i>INFY closing price</span><span><i class="sw level"></i>the level (1500)</span><span><i class="sw alert"></i>alert day</span></div>
+<div class="card"><svg viewBox="0 0 680 260" role="img" class="chart">
+<line class="grid" x1="52" x2="664" y1="226.0" y2="226.0"/>
+<text class="axis" x="44" y="230.0" text-anchor="end">1,470</text>
+<line class="grid" x1="52" x2="664" y1="174.0" y2="174.0"/>
+<text class="axis" x="44" y="178.0" text-anchor="end">1,490</text>
+<line class="grid" x1="52" x2="664" y1="122.0" y2="122.0"/>
+<text class="axis" x="44" y="126.0" text-anchor="end">1,510</text>
+<line class="grid" x1="52" x2="664" y1="70.0" y2="70.0"/>
+<text class="axis" x="44" y="74.0" text-anchor="end">1,530</text>
+<line class="grid" x1="52" x2="664" y1="18.0" y2="18.0"/>
+<text class="axis" x="44" y="22.0" text-anchor="end">1,550</text>
+<text class="axis" x="52.0" y="248" text-anchor="middle">Sep 1</text>
+<text class="axis" x="128.5" y="248" text-anchor="middle">Sep 2</text>
+<text class="axis" x="205.0" y="248" text-anchor="middle">Sep 3</text>
+<text class="axis" x="281.5" y="248" text-anchor="middle">Sep 4</text>
+<text class="axis" x="358.0" y="248" text-anchor="middle">Sep 5</text>
+<text class="axis" x="434.5" y="248" text-anchor="middle">Sep 6</text>
+<text class="axis" x="511.0" y="248" text-anchor="middle">Sep 7</text>
+<text class="axis" x="587.5" y="248" text-anchor="middle">Sep 8</text>
+<text class="axis" x="664.0" y="248" text-anchor="end">Sep 9</text>
+<line class="level" x1="52" x2="664" y1="148.0" y2="148.0"/>
+<text class="level-label" x="56" y="142.0">level 1500</text>
+<polyline class="price" points="52.0,94.7 128.5,59.3 205.0,153.2 281.5,174.0 358.0,140.2 434.5,116.8 511.0,148.0 587.5,161.0 664.0,127.2"/>
+<circle class="price-dot" cx="52.0" cy="94.7" r="3.5"/>
+<circle class="price-dot" cx="128.5" cy="59.3" r="3.5"/>
+<circle class="price-dot" cx="205.0" cy="153.2" r="3.5"/>
+<circle class="price-dot" cx="281.5" cy="174.0" r="3.5"/>
+<circle class="price-dot" cx="358.0" cy="140.2" r="3.5"/>
+<circle class="price-dot" cx="434.5" cy="116.8" r="3.5"/>
+<circle class="price-dot" cx="511.0" cy="148.0" r="3.5"/>
+<circle class="price-dot" cx="587.5" cy="161.0" r="3.5"/>
+<circle class="price-dot" cx="664.0" cy="127.2" r="3.5"/>
+<circle class="touch" cx="511.0" cy="148.0" r="8"/>
+<text class="touch-label" x="511.0" y="174.0" text-anchor="middle">touch, no alert</text>
+<circle class="alert" cx="205.0" cy="153.2" r="9"/>
+<text class="alert-label" x="205.0" y="179.2" text-anchor="middle">alert</text>
+<circle class="alert" cx="587.5" cy="161.0" r="9"/>
+<text class="alert-label" x="587.5" y="187.0" text-anchor="middle">alert</text>
+</svg></div>
+<p>This chart was drawn from real numbers run through the tool. The <b>below 1500</b> rule fires twice:</p>
+<ul>
+<li><b>Sep 3:</b> Sep 2 was 1534.10 (above the line), Sep 3 is 1498.00 (below). It crossed, so <b>alert</b>. This is the brief's own example.</li>
+<li><b>Sep 4:</b> still below, but it was <i>already</i> below. No new alert.</li>
+<li><b>Sep 7:</b> exactly 1500.00, sitting <i>on</i> the line. Not below, so no alert.</li>
+<li><b>Sep 8:</b> 1495, coming down from the line. That counts as crossing, so <b>alert</b>.</li>
+</ul>
+<p>An <code>above</code> rule is the mirror image. On this same chart, “above 1500” would fire on Sep 5 (1490 → 1503) and Sep 9 (1495 → 1508).</p>
+
+<h3>The four situations to remember</h3>
+<p>In each small chart the dashed line is the level, 1500, and the rule is “below 1500”.</p>
+<div class="grid4">
+<figure class="mini"><figcaption>1. It crosses below</figcaption><svg viewBox="0 0 330 190" role="img" class="chart">
+<line class="grid" x1="52" x2="314" y1="156.0" y2="156.0"/>
+<text class="axis" x="44" y="160.0" text-anchor="end">1,470</text>
+<line class="grid" x1="52" x2="314" y1="121.5" y2="121.5"/>
+<text class="axis" x="44" y="125.5" text-anchor="end">1,485</text>
+<line class="grid" x1="52" x2="314" y1="87.0" y2="87.0"/>
+<text class="axis" x="44" y="91.0" text-anchor="end">1,500</text>
+<line class="grid" x1="52" x2="314" y1="52.5" y2="52.5"/>
+<text class="axis" x="44" y="56.5" text-anchor="end">1,515</text>
+<line class="grid" x1="52" x2="314" y1="18.0" y2="18.0"/>
+<text class="axis" x="44" y="22.0" text-anchor="end">1,530</text>
+<text class="axis" x="52.0" y="178" text-anchor="middle">d1</text>
+<text class="axis" x="183.0" y="178" text-anchor="middle">d2</text>
+<text class="axis" x="314.0" y="178" text-anchor="end">d3</text>
+<line class="level" x1="52" x2="314" y1="87.0" y2="87.0"/>
+<text class="level-label" x="56" y="81.0"></text>
+<polyline class="price" points="52.0,52.5 183.0,64.0 314.0,110.0"/>
+<circle class="price-dot" cx="52.0" cy="52.5" r="3.5"/>
+<circle class="price-dot" cx="183.0" cy="64.0" r="3.5"/>
+<circle class="price-dot" cx="314.0" cy="110.0" r="3.5"/>
+<circle class="alert" cx="314.0" cy="110.0" r="9"/>
+<text class="alert-label" x="314.0" y="136.0" text-anchor="middle">alert</text>
+</svg><p>Yesterday above, today below: <b>alert</b>.</p></figure>
+<figure class="mini"><figcaption>2. It stays below</figcaption><svg viewBox="0 0 330 190" role="img" class="chart">
+<line class="grid" x1="52" x2="314" y1="156.0" y2="156.0"/>
+<text class="axis" x="44" y="160.0" text-anchor="end">1,470</text>
+<line class="grid" x1="52" x2="314" y1="121.5" y2="121.5"/>
+<text class="axis" x="44" y="125.5" text-anchor="end">1,485</text>
+<line class="grid" x1="52" x2="314" y1="87.0" y2="87.0"/>
+<text class="axis" x="44" y="91.0" text-anchor="end">1,500</text>
+<line class="grid" x1="52" x2="314" y1="52.5" y2="52.5"/>
+<text class="axis" x="44" y="56.5" text-anchor="end">1,515</text>
+<line class="grid" x1="52" x2="314" y1="18.0" y2="18.0"/>
+<text class="axis" x="44" y="22.0" text-anchor="end">1,530</text>
+<text class="axis" x="52.0" y="178" text-anchor="middle">d1</text>
+<text class="axis" x="139.3" y="178" text-anchor="middle">d2</text>
+<text class="axis" x="226.7" y="178" text-anchor="middle">d3</text>
+<text class="axis" x="314.0" y="178" text-anchor="end">d4</text>
+<line class="level" x1="52" x2="314" y1="87.0" y2="87.0"/>
+<text class="level-label" x="56" y="81.0"></text>
+<polyline class="price" points="52.0,64.0 139.3,105.4 226.7,114.6 314.0,121.5"/>
+<circle class="price-dot" cx="52.0" cy="64.0" r="3.5"/>
+<circle class="price-dot" cx="139.3" cy="105.4" r="3.5"/>
+<circle class="price-dot" cx="226.7" cy="114.6" r="3.5"/>
+<circle class="price-dot" cx="314.0" cy="121.5" r="3.5"/>
+<circle class="alert" cx="139.3" cy="105.4" r="9"/>
+<text class="alert-label" x="139.3" y="131.4" text-anchor="middle">alert</text>
+</svg><p>Only the first day under the line counts. No repeats.</p></figure>
+<figure class="mini"><figcaption>3. It only touches the line</figcaption><svg viewBox="0 0 330 190" role="img" class="chart">
+<line class="grid" x1="52" x2="314" y1="156.0" y2="156.0"/>
+<text class="axis" x="44" y="160.0" text-anchor="end">1,470</text>
+<line class="grid" x1="52" x2="314" y1="121.5" y2="121.5"/>
+<text class="axis" x="44" y="125.5" text-anchor="end">1,485</text>
+<line class="grid" x1="52" x2="314" y1="87.0" y2="87.0"/>
+<text class="axis" x="44" y="91.0" text-anchor="end">1,500</text>
+<line class="grid" x1="52" x2="314" y1="52.5" y2="52.5"/>
+<text class="axis" x="44" y="56.5" text-anchor="end">1,515</text>
+<line class="grid" x1="52" x2="314" y1="18.0" y2="18.0"/>
+<text class="axis" x="44" y="22.0" text-anchor="end">1,530</text>
+<text class="axis" x="52.0" y="178" text-anchor="middle">d1</text>
+<text class="axis" x="183.0" y="178" text-anchor="middle">d2</text>
+<text class="axis" x="314.0" y="178" text-anchor="end">d3</text>
+<line class="level" x1="52" x2="314" y1="87.0" y2="87.0"/>
+<text class="level-label" x="56" y="81.0"></text>
+<polyline class="price" points="52.0,64.0 183.0,87.0 314.0,68.6"/>
+<circle class="price-dot" cx="52.0" cy="64.0" r="3.5"/>
+<circle class="price-dot" cx="183.0" cy="87.0" r="3.5"/>
+<circle class="price-dot" cx="314.0" cy="68.6" r="3.5"/>
+<circle class="touch" cx="183.0" cy="87.0" r="8"/>
+<text class="touch-label" x="183.0" y="113.0" text-anchor="middle">touch, no alert</text>
+</svg><p>Exactly 1500 is <b>on</b> the line, not under it. No alert.</p></figure>
+<figure class="mini"><figcaption>4. It starts below</figcaption><svg viewBox="0 0 330 190" role="img" class="chart">
+<line class="grid" x1="52" x2="314" y1="156.0" y2="156.0"/>
+<text class="axis" x="44" y="160.0" text-anchor="end">1,470</text>
+<line class="grid" x1="52" x2="314" y1="121.5" y2="121.5"/>
+<text class="axis" x="44" y="125.5" text-anchor="end">1,485</text>
+<line class="grid" x1="52" x2="314" y1="87.0" y2="87.0"/>
+<text class="axis" x="44" y="91.0" text-anchor="end">1,500</text>
+<line class="grid" x1="52" x2="314" y1="52.5" y2="52.5"/>
+<text class="axis" x="44" y="56.5" text-anchor="end">1,515</text>
+<line class="grid" x1="52" x2="314" y1="18.0" y2="18.0"/>
+<text class="axis" x="44" y="22.0" text-anchor="end">1,530</text>
+<text class="axis" x="52.0" y="178" text-anchor="middle">d1</text>
+<text class="axis" x="183.0" y="178" text-anchor="middle">d2</text>
+<text class="axis" x="314.0" y="178" text-anchor="end">d3</text>
+<line class="level" x1="52" x2="314" y1="87.0" y2="87.0"/>
+<text class="level-label" x="56" y="81.0"></text>
+<polyline class="price" points="52.0,110.0 183.0,119.2 314.0,123.8"/>
+<circle class="price-dot" cx="52.0" cy="110.0" r="3.5"/>
+<circle class="price-dot" cx="183.0" cy="119.2" r="3.5"/>
+<circle class="price-dot" cx="314.0" cy="123.8" r="3.5"/>
+</svg><p>Day 1 has no yesterday, so nothing crossed. No alert.</p></figure>
+</div>
+
+<div class="card">
+<b>How the tool does it:</b> for each day it works out <code>close − level</code>.
+<table><tr><th>Day</th><th>Close</th><th>close − 1500</th><th>Side</th></tr>
+<tr><td>Sep 1</td><td>1520.50</td><td>+20.50</td><td>above</td></tr>
+<tr><td>Sep 2</td><td>1534.10</td><td>+34.10</td><td>above</td></tr>
+<tr class="hit"><td>Sep 3</td><td>1498.00</td><td>−2.00</td><td>below ← changed side, alert</td></tr></table>
+Positive means above the line, negative means below, zero means exactly on it. An alert is just
+<b>“the sign changed since yesterday”</b>.
+</div>
+
+<h2>Rule 2: the moving-average rule</h2>
+<div class="rule">{"id": "r2", "instrument": "TCS", "type": "ma_cross", "short": 5, "long": 20, "direction": "above"}</div>
+<p>In plain words: <b>“Tell me the day TCS’s short-term trend rises above its long-term trend.”</b></p>
+
+<h3>What is a moving average?</h3>
+<p>It is just <b>the average of the last few days</b>. Every day the window slides forward by one day,
+so the average “moves”.</p>
+<ul>
+<li>A <b>5-day average</b> reacts fast: it mostly reflects this week.</li>
+<li>A <b>20-day average</b> reacts slowly: it reflects the last month.</li>
+</ul>
+<p>When the fast one climbs above the slow one, prices have recently been higher than usual, which many traders read as the trend turning up.</p>
+
+<div class="card"><svg viewBox="0 0 680 250" class="chart" role="img">
+<rect class="cell" x="40" y="56" width="70" height="44" rx="8"/>
+<text class="cell-text" x="75.0" y="84" text-anchor="middle">10</text>
+<text class="axis" x="75.0" y="44" text-anchor="middle">day 1</text>
+<rect class="cell" x="124" y="56" width="70" height="44" rx="8"/>
+<text class="cell-text" x="159.0" y="84" text-anchor="middle">10</text>
+<text class="axis" x="159.0" y="44" text-anchor="middle">day 2</text>
+<rect class="cell" x="208" y="56" width="70" height="44" rx="8"/>
+<text class="cell-text" x="243.0" y="84" text-anchor="middle">7</text>
+<text class="axis" x="243.0" y="44" text-anchor="middle">day 3</text>
+<rect class="cell" x="292" y="56" width="70" height="44" rx="8"/>
+<text class="cell-text" x="327.0" y="84" text-anchor="middle">10</text>
+<text class="axis" x="327.0" y="44" text-anchor="middle">day 4</text>
+<rect class="cell" x="376" y="56" width="70" height="44" rx="8"/>
+<text class="cell-text" x="411.0" y="84" text-anchor="middle">13</text>
+<text class="axis" x="411.0" y="44" text-anchor="middle">day 5</text>
+<path class="br-fast" d="M292,114 v10 H446 v-10"/><text class="br-fast-text" x="369.0" y="144" text-anchor="middle">last 2 days: (10 + 13) / 2 = 11.5</text>
+<path class="br-slow" d="M208,168 v10 H446 v-10"/><text class="br-slow-text" x="327.0" y="198" text-anchor="middle">last 3 days: (7 + 10 + 13) / 3 = 10</text>
+<text class="note" x="40" y="238">On day 5 the 2-day average (11.5) is above the 3-day average (10).</text>
+</svg></div>
+
+<h3>The crossing</h3>
+<p>Now the “line” is not fixed. It is the slow average, and it moves too. The alert fires on the day the
+<span style="color:var(--fast);font-weight:700">fast line</span> crosses the
+<span style="color:var(--slow);font-weight:700">slow line</span>. This chart is the brief’s TCS example
+(sample 01), drawn from the real data:</p>
+<div class="legend"><span><i class="sw price"></i>TCS close</span><span><i class="sw fast"></i>5-day average (fast)</span><span><i class="sw slow"></i>20-day average (slow)</span><span><i class="sw alert"></i>alert day</span></div>
+<div class="card"><svg viewBox="0 0 680 260" role="img" class="chart">
+<line class="grid" x1="52" x2="664" y1="226.0" y2="226.0"/>
+<text class="axis" x="44" y="230.0" text-anchor="end">3,890</text>
+<line class="grid" x1="52" x2="664" y1="174.0" y2="174.0"/>
+<text class="axis" x="44" y="178.0" text-anchor="end">3,915</text>
+<line class="grid" x1="52" x2="664" y1="122.0" y2="122.0"/>
+<text class="axis" x="44" y="126.0" text-anchor="end">3,940</text>
+<line class="grid" x1="52" x2="664" y1="70.0" y2="70.0"/>
+<text class="axis" x="44" y="74.0" text-anchor="end">3,965</text>
+<line class="grid" x1="52" x2="664" y1="18.0" y2="18.0"/>
+<text class="axis" x="44" y="22.0" text-anchor="end">3,990</text>
+<text class="axis" x="52.0" y="248" text-anchor="middle">03 Aug</text>
+<text class="axis" x="154.0" y="248" text-anchor="middle">12 Aug</text>
+<text class="axis" x="256.0" y="248" text-anchor="middle">21 Aug</text>
+<text class="axis" x="358.0" y="248" text-anchor="middle">01 Sep</text>
+<text class="axis" x="460.0" y="248" text-anchor="middle">10 Sep</text>
+<text class="axis" x="562.0" y="248" text-anchor="middle">21 Sep</text>
+<text class="axis" x="664.0" y="248" text-anchor="end">30 Sep</text>
+<polyline class="price-thin" points="52.0,18.0 66.6,24.2 81.1,30.5 95.7,36.7 110.3,43.0 124.9,49.2 139.4,55.4 154.0,61.7 168.6,67.9 183.1,74.2 197.7,80.4 212.3,86.6 226.9,92.9 241.4,99.1 256.0,105.4 270.6,111.6 285.1,117.8 299.7,124.1 314.3,130.3 328.9,136.6 343.4,142.8 358.0,226.0 372.6,200.5 387.1,161.5 401.7,167.8 416.3,174.0 430.9,180.2 445.4,186.5 460.0,192.7 474.6,199.0 489.1,205.2 503.7,211.4 518.3,217.7 532.9,223.9 547.4,203.1 562.0,182.3 576.6,161.5 591.1,140.7 605.7,119.9 620.3,99.1 634.9,78.3 649.4,57.5 664.0,36.7"/>
+<polyline class="fast" points="110.3,30.5 124.9,36.7 139.4,43.0 154.0,49.2 168.6,55.4 183.1,61.7 197.7,67.9 212.3,74.2 226.9,80.4 241.4,86.6 256.0,92.9 270.6,99.1 285.1,105.4 299.7,111.6 314.3,117.8 328.9,124.1 343.4,130.3 358.0,152.0 372.6,167.2 387.1,173.5 401.7,179.7 416.3,186.0 430.9,176.8 445.4,174.0 460.0,180.2 474.6,186.5 489.1,192.7 503.7,199.0 518.3,205.2 532.9,211.4 547.4,212.3 562.0,207.7 576.6,197.7 591.1,182.3 605.7,161.5 620.3,140.7 634.9,119.9 649.4,99.1 664.0,78.3"/>
+<polyline class="slow" points="328.9,77.3 343.4,83.5 358.0,93.6 372.6,102.1 387.1,108.3 401.7,114.6 416.3,120.8 430.9,127.1 445.4,133.3 460.0,139.6 474.6,145.8 489.1,152.0 503.7,158.3 518.3,164.5 532.9,170.8 547.4,175.6 562.0,179.2 576.6,181.4 591.1,182.2 605.7,181.7 620.3,179.8 634.9,176.6 649.4,168.2 664.0,160.0"/>
+<circle class="alert" cx="605.7" cy="161.5" r="9"/>
+<text class="alert-label" x="605.7" y="147.5" text-anchor="middle">alert: 24 Sep</text>
+</svg></div>
+<p>From August the price drifts down, so the fast average stays under the slow one. In mid-September the price turns up.
+The fast average catches up and, on <b>24 September</b>, rises above the slow one: <b>alert</b>, exactly as in the brief.
+(On 23 September they were almost equal, 3911.0 against 3911.06, but not crossed yet.)</p>
+
+<h3>Why the first alert can only come on day 21</h3>
+<div class="card"><svg viewBox="0 0 680 170" class="chart" role="img">
+<rect class="day-off" x="30.0" y="70" width="24" height="30" rx="5"/>
+<text class="day-num" x="42.0" y="90" text-anchor="middle">1</text>
+<rect class="day-off" x="59.5" y="70" width="24" height="30" rx="5"/>
+<text class="day-num" x="71.5" y="90" text-anchor="middle">2</text>
+<rect class="day-off" x="89.0" y="70" width="24" height="30" rx="5"/>
+<text class="day-num" x="101.0" y="90" text-anchor="middle">3</text>
+<rect class="day-off" x="118.5" y="70" width="24" height="30" rx="5"/>
+<text class="day-num" x="130.5" y="90" text-anchor="middle">4</text>
+<rect class="day-off" x="148.0" y="70" width="24" height="30" rx="5"/>
+<text class="day-num" x="160.0" y="90" text-anchor="middle">5</text>
+<rect class="day-off" x="177.5" y="70" width="24" height="30" rx="5"/>
+<text class="day-num" x="189.5" y="90" text-anchor="middle">6</text>
+<rect class="day-off" x="207.0" y="70" width="24" height="30" rx="5"/>
+<text class="day-num" x="219.0" y="90" text-anchor="middle">7</text>
+<rect class="day-off" x="236.5" y="70" width="24" height="30" rx="5"/>
+<text class="day-num" x="248.5" y="90" text-anchor="middle">8</text>
+<rect class="day-off" x="266.0" y="70" width="24" height="30" rx="5"/>
+<text class="day-num" x="278.0" y="90" text-anchor="middle">9</text>
+<rect class="day-off" x="295.5" y="70" width="24" height="30" rx="5"/>
+<text class="day-num" x="307.5" y="90" text-anchor="middle">10</text>
+<rect class="day-off" x="325.0" y="70" width="24" height="30" rx="5"/>
+<text class="day-num" x="337.0" y="90" text-anchor="middle">11</text>
+<rect class="day-off" x="354.5" y="70" width="24" height="30" rx="5"/>
+<text class="day-num" x="366.5" y="90" text-anchor="middle">12</text>
+<rect class="day-off" x="384.0" y="70" width="24" height="30" rx="5"/>
+<text class="day-num" x="396.0" y="90" text-anchor="middle">13</text>
+<rect class="day-off" x="413.5" y="70" width="24" height="30" rx="5"/>
+<text class="day-num" x="425.5" y="90" text-anchor="middle">14</text>
+<rect class="day-off" x="443.0" y="70" width="24" height="30" rx="5"/>
+<text class="day-num" x="455.0" y="90" text-anchor="middle">15</text>
+<rect class="day-off" x="472.5" y="70" width="24" height="30" rx="5"/>
+<text class="day-num" x="484.5" y="90" text-anchor="middle">16</text>
+<rect class="day-off" x="502.0" y="70" width="24" height="30" rx="5"/>
+<text class="day-num" x="514.0" y="90" text-anchor="middle">17</text>
+<rect class="day-off" x="531.5" y="70" width="24" height="30" rx="5"/>
+<text class="day-num" x="543.5" y="90" text-anchor="middle">18</text>
+<rect class="day-off" x="561.0" y="70" width="24" height="30" rx="5"/>
+<text class="day-num" x="573.0" y="90" text-anchor="middle">19</text>
+<rect class="day-on" x="590.5" y="70" width="24" height="30" rx="5"/>
+<text class="day-num" x="602.5" y="90" text-anchor="middle">20</text>
+<rect class="day-alert" x="620.0" y="70" width="24" height="30" rx="5"/>
+<text class="day-num" x="632.0" y="90" text-anchor="middle">21</text>
+<text class="axis" x="30" y="56">days 1 to 19: not enough days yet, the 20-day average does not exist</text>
+<text class="note" x="602.5" y="122" text-anchor="end">day 20: first average, but no "yesterday"</text>
+<text class="alert-label" x="632.0" y="146" text-anchor="end">day 21: first day an alert is possible</text>
+</svg></div>
+<p>A 20-day average needs 20 days of prices before it exists. And a crossing needs a <b>yesterday</b> to compare with.
+So with <code>5/20</code>, day 21 is the earliest possible alert. A stock with only 20 rows of data can never fire this rule.</p>
+
+<h3>A tiny example you can do on paper</h3>
+<table>
+<tr><th>Day</th><th>Close</th><th>2-day avg</th><th>3-day avg</th><th>Fast vs slow</th></tr>
+<tr><td>1</td><td>10</td><td>–</td><td>–</td><td>not enough days</td></tr>
+<tr><td>2</td><td>10</td><td>10</td><td>–</td><td>not enough days</td></tr>
+<tr><td>3</td><td>7</td><td>8.5</td><td>9</td><td>fast below (first day, no yesterday)</td></tr>
+<tr><td>4</td><td>10</td><td>8.5</td><td>9</td><td>fast still below</td></tr>
+<tr class="hit"><td>5</td><td>13</td><td>11.5</td><td>10</td><td>fast now above ← alert</td></tr>
+</table>
+
+<div class="card">
+<b>Two small tricks in the code</b>
+<ul>
+<li><b>No dividing.</b> Instead of comparing <code>sum5 ÷ 5</code> with <code>sum20 ÷ 20</code>, the tool compares
+<code>sum5 × 20</code> with <code>sum20 × 5</code>. That is the same question (multiply both sides by 100), with no rounding.</li>
+<li><b>Exact numbers.</b> Prices are stored as <code>Decimal</code>, not normal computer decimals (floats).
+With floats, 1854.05 + 1497.56 + 1275.19 + 2076.42 can come out as 6703.219999…, which makes two equal averages look
+different and causes a false alert.</li>
+</ul>
+</div>
+
+<h2>Reading the output</h2>
+<div class="rule">2026-09-03  r1  INFY  level below 1500<br>2026-09-24  r2  TCS   ma_cross 5/20 above</div>
+<table>
+<tr><th>Part</th><th>Meaning</th></tr>
+<tr><td><code>2026-09-03</code></td><td>the day the alert fired</td></tr>
+<tr><td><code>r1</code></td><td>which rule fired (its id)</td></tr>
+<tr><td><code>INFY</code></td><td>which stock</td></tr>
+<tr><td><code>level below 1500</code></td><td>what happened</td></tr>
+</table>
+<p>One line per alert, sorted by date, then by rule id. Days with no alert print nothing at all.</p>
+
+<h2>Quick self-test</h2>
+<details><summary>Level 1500, below. Closes: 1510, 1500, 1499. Which day fires?</summary>
+<p><b>Day 3.</b> Day 2 is exactly on the line (not below). Day 3 goes from “on the line” to “below”, which counts.</p></details>
+<details><summary>Level 1500, below. Closes: 1490, 1480, 1470. Which day fires?</summary>
+<p><b>None.</b> It starts below and never crosses. Day 1 has no yesterday.</p></details>
+<details><summary>A 5/20 rule on a stock with exactly 20 days of data. Can it fire?</summary>
+<p><b>No.</b> The 20-day average exists only on day 20, and day 20 has no yesterday with an average.</p></details>
+<details><summary>Why doesn’t the alert repeat every day the price stays below?</summary>
+<p>Because the rule is about the <b>moment of crossing</b>, the day the side changes. Staying on the same side is not a change.</p></details>
+<details><summary>Fast and slow averages are exactly equal today, and the fast one is higher tomorrow. When is the alert?</summary>
+<p><b>Tomorrow.</b> Equal is not “above”, so today does not fire. Tomorrow it goes from equal to above, so that is the crossing.</p></details>
+
+</main></body></html>
