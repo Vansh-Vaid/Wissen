@@ -1,54 +1,77 @@
 # Price Alert Tool
 
+Reads daily closing prices and alert rules, and prints which alert fired on which day.
+
+## How to run
+Needs Python 3.9 or newer. Nothing to install.
+
 ```
 python alerts.py prices.csv rules.json
 python -m unittest
 ```
-Needs Python 3.9 or newer, nothing to install. Alerts are printed to stdout, warnings and errors to stderr. Exit code 0 on success, 2 on an error.
+
+Example:
+```
+python alerts.py samples/01_brief_example/prices.csv samples/01_brief_example/rules.json
+```
 
 ## How it works
-Both rule types become a number that crosses zero:
-- level rule: `close - level`
-- ma_cross rule: `MA_short - MA_long`, compared as `short_sum * long - long_sum * short` so nothing is divided
 
-A rule fires on a day when that number is on the target side and was not on the previous day. Prices are read as `Decimal`, not float, so exact ties stay exact.
+### Level rule
+A level rule watches `close - level` for each day.
 
-## Decisions
-- A level rule fires every time the price crosses, not only the first time. Equal to the level is not a cross.
-- The first day of an instrument never fires, since there is no previous day.
-- Moving averages use the instrument's own rows, not calendar days. With a 5/20 rule the earliest alert is on the 21st row.
-- Output columns are padded to line up, matching the example in the brief. Lines are sorted by date, then rule id.
-- A bad price row (bad date, non-number, zero or negative price) is skipped with a warning.
-- Two different closes for the same instrument and date stop the tool, since there is no way to know which is right. An exact duplicate is skipped.
-- An invalid rule (unknown type or direction, short not less than long, duplicate id) stops the tool with a message naming the rule.
+- `below 1500` fires on the day the close goes under 1500, when the day before it was 1500 or more.
+- `above 1500` fires on the day the close goes over 1500, when the day before it was 1500 or less.
 
-## Samples
-Each folder in `samples/` has `prices.csv`, `rules.json` and `expected.txt`. `python -m unittest` runs all of them.
+```
+date    close    close - 1500
+Sep 1   1520.50   +20.50
+Sep 2   1534.10   +34.10
+Sep 3   1498.00    -2.00   <- crossed below, alert
+```
 
-| Sample | What it checks |
-|---|---|
-| 01_brief_example | The brief's data and rules give the brief's exact output |
-| 02_level_lowered_and_raised | Same prices, levels at 1490, 1500 and 1550; touching 1500 is not a cross |
-| 03_level_first_day_and_staying | Starting on the target side, staying there, levels never reached |
-| 04_ma_windows_increased | 2/3, 3/5 and 5/10 windows on the same prices; a tie before a cross |
-| 05_ma_full_window_boundary | 20 rows cannot fire a 5/20 rule, 21 can; 5/21 needs 22 |
-| 06_ma_exact_tie | An exact MA tie that floats would report as a cross |
-| 07_unordered_and_gaps | Shuffled rows, weekends and a missing week |
-| 08_messy_csv | BOM, Windows line endings, odd header, blank, bad and duplicate rows |
-| 09_ordering_and_alignment | Several alerts on one day, id order, long tickers, unknown stock |
-| 10_invalid_rule | A rule with short > long stops the tool with exit code 2 |
+It fires each time the price crosses, not on every day it stays below. A close exactly at the level does not count as crossing. The first day of a stock never fires, because there is no day before it.
 
-## Verification
-- The samples' expected outputs were worked out by hand first, then matched against an earlier, separately written version of the tool.
-- I broke the code on purpose in 14 ways (firing every day, off-by-one windows, floats, wrong sort order, and so on) and checked that the tests fail each time. One gap was found this way: `short == long` was not tested, so I added it.
-- Outside the repo, I also ran 100 generated cases (levels raised and lowered, windows from 1/2 to 20/50, ties, shuffled and messy files, odd ids, invalid rules) against a separate simple implementation; all matched. I checked 12 of them fully by hand, one or more from each group.
-- Tests pass on Python 3.9, 3.11, 3.12 and 3.13.
+### Moving average rule
+A moving average of N days is the average of the last N closes. With `short 5, long 20`, the tool compares the 5-day average with the 20-day average every day.
+
+- `above` fires on the day the short average goes over the long one, when the day before it was equal or under.
+- `below` is the opposite.
+
+An average needs a full window, so the 20-day average exists only from the 20th day. Because the day before must also have it, the earliest possible alert for 5/20 is the 21st day.
+
+```
+close   10   10    7   10   13
+MA2      -   10  8.5  8.5 11.5
+MA3      -    -    9    9   10
+                            ^ MA2 goes over MA3, alert on day 5
+```
+
+The two averages are compared as `short_sum * long` against `long_sum * short`, which gives the same answer without dividing. Prices are read as `Decimal` instead of float, so equal averages stay exactly equal.
+
+### Output
+One line per alert: date, rule id, stock, and what fired. Lines are sorted by date, then rule id, and the columns are lined up as in the brief:
+
+```
+2026-09-03  r1  INFY  level below 1500
+2026-09-24  r2  TCS   ma_cross 5/20 above
+```
+
+Days with no alerts print nothing.
+
+### Bad input
+- Rows can be in any order; each stock is sorted by date.
+- A row with a bad date or a price that is not a positive number is skipped with a warning.
+- Two different prices for the same stock and day stop the tool, because there is no way to know which is right.
+- An invalid rule (unknown type or direction, short not smaller than long, repeated id) stops the tool with an error.
+
+## Tests
+`test_alerts.py` checks the level and moving-average logic on small hand-worked examples, the file reading, and the 10 cases in `samples/`. Each sample has `prices.csv`, `rules.json` and the `expected.txt` output, and covers one situation: the brief's example, raised and lowered levels, longer averages, a full window, exact ties, shuffled rows, a messy file, sort order, and an invalid rule.
 
 ## Use of the AI assistant
-I used an AI assistant to plan the edge cases, write the code and tests, and generate the samples. I asked it to design the tool, test it against the brief, add edge cases, and finally rewrite everything in a simpler style.
+Prompts in brief: design the tool as a senior engineer; build and test it against the brief; add edge cases; rewrite it simply.
 
-What it got wrong:
-1. It printed single spaces between columns, because copying text out of the PDF collapses spaces. Measuring the PDF showed the columns are padded. Fixed.
-2. It claimed dividing Decimals could break exact ties. It was wrong: the real problem is adding floats. The tie test now uses a real float failure.
-3. One of its hand calculations expected an MA cross a day early. Rechecking showed an exact tie on that day. The code was right and the test was wrong.
-4. Some of its own checks were flawed: once it edited a comment instead of the code, and once Python ran an old cached copy of the file. Both were caught and the checks were redone.
+What it got wrong, and what I changed:
+1. It printed single spaces between columns. The brief's example has the columns lined up, so I fixed the output.
+2. It said dividing could make two equal averages look different. The real problem is adding floats, so prices are read as `Decimal`, and a test uses a real case where floats are wrong.
+3. One of its hand calculations expected an alert a day early. The averages were exactly equal that day, so the code was right and the test was fixed.
