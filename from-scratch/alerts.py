@@ -21,3 +21,12 @@ def crossing_days(signals, direction):
                 fired.append(day)
         yesterday = today
     return fired
+
+
+def level_signals(series, level):
+    """Turn a level rule into a signal that crosses zero when the close crosses the level.
+
+    series: list of (date, close) sorted by date, closes as Decimal.
+    level:  the rule's level as Decimal.
+    """
+    return [(day, close - level) for day, close in series]

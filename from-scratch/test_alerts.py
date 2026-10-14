@@ -1,6 +1,18 @@
 import unittest
+from datetime import date, timedelta
+from decimal import Decimal
 
-from alerts import crossing_days
+from alerts import crossing_days, level_signals
+
+
+def prices(*closes):
+    """Build [(date, Decimal close), ...] for consecutive days from Sep 1, 2026."""
+    start = date(2026, 9, 1)
+    return [(start + timedelta(days=i), Decimal(str(c))) for i, c in enumerate(closes)]
+
+
+def level_alerts(closes, direction, level):
+    return crossing_days(level_signals(prices(*closes), Decimal(str(level))), direction)
 
 
 class CrossingDaysTest(unittest.TestCase):
@@ -38,6 +50,33 @@ class CrossingDaysTest(unittest.TestCase):
         # None means "not known yet", like a moving average without enough days.
         signals = [("d1", None), ("d2", None), ("d3", -5), ("d4", 5)]
         self.assertEqual(crossing_days(signals, "above"), ["d4"])
+
+
+class LevelRuleTest(unittest.TestCase):
+    def test_brief_example_fires_on_sep_3(self):
+        # The PDF: INFY 1520.50, 1534.10, 1498.00 with "below 1500" fires on 2026-09-03.
+        self.assertEqual(level_alerts(["1520.50", "1534.10", "1498.00"], "below", 1500), [date(2026, 9, 3)])
+
+    def test_signal_is_close_minus_level(self):
+        signals = level_signals(prices("1520.50", "1498.00"), Decimal(1500))
+        self.assertEqual(signals, [(date(2026, 9, 1), Decimal("20.50")), (date(2026, 9, 2), Decimal("-2.00"))])
+
+    def test_close_exactly_on_the_level_is_not_crossed(self):
+        self.assertEqual(level_alerts([1510, 1500, 1510], "below", 1500), [])
+
+    def test_one_paisa_below_the_level_is_crossed(self):
+        self.assertEqual(level_alerts(["1500.00", "1499.99"], "below", 1500), [date(2026, 9, 2)])
+
+    def test_same_number_written_differently_is_equal(self):
+        # 1500.10 and 1500.1 are the same price: no crossing above 1500.1.
+        self.assertEqual(level_alerts(["1499.90", "1500.10"], "above", "1500.1"), [])
+
+    def test_above_rule(self):
+        self.assertEqual(level_alerts([1490, 1510, 1520], "above", 1500), [date(2026, 9, 2)])
+
+    def test_empty_and_single_day(self):
+        self.assertEqual(level_alerts([], "below", 1500), [])
+        self.assertEqual(level_alerts([1400], "below", 1500), [])
 
 
 if __name__ == "__main__":
