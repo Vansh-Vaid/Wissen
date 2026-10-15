@@ -7,10 +7,12 @@ from decimal import MAX_PREC, Decimal, InvalidOperation, localcontext
 from typing import Optional
 
 
+# Raised for bad input; main() turns it into a clean error message.
 class InputError(Exception):
     pass
 
 
+# One checked rule from rules.json.
 @dataclass
 class Rule:
     id: str
@@ -23,10 +25,12 @@ class Rule:
     long: int = 0
 
 
+# Print a warning to stderr so it never mixes with the alert lines.
 def warn(message):
     print(f"warning: {message}", file=sys.stderr)
 
 
+# Find the date, instrument and close columns by name, in any order.
 def find_columns(header):
     names = [name.strip().lower() for name in header]
     for column in ("date", "instrument", "close"):
@@ -35,6 +39,7 @@ def find_columns(header):
     return names.index("date"), names.index("instrument"), names.index("close")
 
 
+# Turn one CSV row into (instrument, date, close), or None if the row is bad.
 def parse_row(row, columns):
     date_col, instrument_col, close_col = columns
     try:
@@ -48,6 +53,7 @@ def parse_row(row, columns):
     return instrument, day, close
 
 
+# Read the prices file into {instrument: [(date, close), ...]}, each sorted by date.
 def read_prices(path):
     prices = {}
     seen = {}
@@ -84,10 +90,12 @@ def read_prices(path):
     return prices
 
 
+# True for 5, False for 5.5, "5" and True.
 def is_whole_number(value):
     return isinstance(value, int) and not isinstance(value, bool)
 
 
+# Validate one rule from the JSON and return it as a Rule.
 def check_rule(rule, used_ids):
     if not isinstance(rule, dict):
         raise InputError(f"rule {rule!r} is not an object")
@@ -128,6 +136,7 @@ def check_rule(rule, used_ids):
     raise InputError(f"rule '{rule_id}': unknown type {rule.get('type')!r}")
 
 
+# Read and validate every rule in the rules file.
 def read_rules(path):
     with open(path, encoding="utf-8-sig") as f:
         try:
@@ -142,10 +151,13 @@ def read_rules(path):
     return [check_rule(rule, used_ids) for rule in raw]
 
 
+# Level rule: one number per day, close - level.
 def level_differences(series, level):
     return [(day, close - level) for day, close in series]
 
 
+# Moving-average rule: one number per day with the sign of MA_short - MA_long.
+# The value is None until the stock has enough days for the long window.
 def ma_differences(series, short, long):
     # sign of (short_sum / short - long_sum / long), without dividing
     with localcontext() as context:
@@ -165,6 +177,7 @@ def ma_differences(series, short, long):
     return values
 
 
+# Days on which the number moves onto the given side of zero, compared with the day before.
 def crossing_days(values, direction):
     days = []
     for (_, before), (day, now) in zip(values, values[1:]):
@@ -177,6 +190,7 @@ def crossing_days(values, direction):
     return days
 
 
+# Run every rule on its instrument's prices; return alerts sorted by date, then rule id.
 def find_alerts(prices, rules):
     alerts = []
     for rule in rules:
@@ -199,6 +213,7 @@ def find_alerts(prices, rules):
     return alerts
 
 
+# Format alerts as lines with the columns lined up, as in the brief.
 def format_alerts(alerts):
     id_width = max((len(rule_id) for _, rule_id, _, _ in alerts), default=0)
     name_width = max((len(name) for _, _, name, _ in alerts), default=0)
@@ -208,6 +223,7 @@ def format_alerts(alerts):
     ]
 
 
+# Entry point: read both files, print the alerts, return the exit code (0 ok, 2 error).
 def main(args):
     if len(args) != 2:
         print("usage: python alerts.py prices.csv rules.json", file=sys.stderr)
